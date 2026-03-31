@@ -4,16 +4,49 @@ export function todayISO() {
   return new Date().toISOString().split("T")[0];
 }
 
+/** `service_logs` columns for Chemicals Added (not TA readings before/after). */
+export const SERVICE_LOG_CHEMICAL_COLUMNS = [
+  "pool_pucks",
+  "pool_granulated",
+  "pool_ta_added",
+  "spa_mini_pucks",
+  "spa_granulated",
+  "spa_ta_added",
+];
+
+function patchIncludesChemicalColumns(patch) {
+  if (!patch || typeof patch !== "object") return false;
+  return SERVICE_LOG_CHEMICAL_COLUMNS.some((k) =>
+    Object.prototype.hasOwnProperty.call(patch, k)
+  );
+}
+
 /**
- * Flatten the technician UI work state into `service_logs` column patch.
- * @param {{ pool: any, spa: any, poolChem: any, spaChem: any }} state
+ * Chemicals Added → `service_logs` columns (distinct from pool/spa TA readings).
+ * Pool: Pucks → pool_pucks, Granulated → pool_granulated, TA → pool_ta_added.
+ * Spa: Mini Pucks → spa_mini_pucks, Granulated → spa_granulated, TA → spa_ta_added.
+ * @param {{ poolChem?: any, spaChem?: any }} state
  */
-export function mapWorkStateToServiceLogPatch(state) {
-  const pool = state?.pool ?? {};
-  const spa = state?.spa ?? {};
+export function mapChemicalWorkStateToServiceLogPatch(state) {
   const poolChem = state?.poolChem ?? {};
   const spaChem = state?.spaChem ?? {};
+  return {
+    pool_pucks: poolChem.pucks ?? "",
+    pool_granulated: poolChem.granulated ?? "",
+    pool_ta_added: poolChem.ta ?? "",
+    spa_mini_pucks: spaChem.pucks ?? "",
+    spa_granulated: spaChem.granulated ?? "",
+    spa_ta_added: spaChem.ta ?? "",
+  };
+}
 
+/**
+ * Readings (before/after) only — includes TA test strips, not chemicals added.
+ * @param {{ pool?: any, spa?: any }} state
+ */
+export function mapReadingsWorkStateToServiceLogPatch(state) {
+  const pool = state?.pool ?? {};
+  const spa = state?.spa ?? {};
   return {
     pool_tb_before: pool.tb?.before ?? "",
     pool_tb_after: pool.tb?.after ?? "",
@@ -34,38 +67,46 @@ export function mapWorkStateToServiceLogPatch(state) {
     spa_ta_before: spa.ta?.before ?? "",
     spa_ta_after: spa.ta?.after ?? "",
     spa_temp: spa.spaTemp?.after ?? "",
+  };
+}
 
-    pool_pucks: poolChem.pucks ?? "",
-    pool_granulated: poolChem.granulated ?? "",
-    pool_ta_added: poolChem.ta ?? "",
-
-    spa_mini_pucks: spaChem.pucks ?? "",
-    spa_granulated: spaChem.granulated ?? "",
-    spa_ta_added: spaChem.ta ?? "",
+/**
+ * Flatten the technician UI work state into `service_logs` column patch.
+ * @param {{ pool: any, spa: any, poolChem: any, spaChem: any }} state
+ */
+export function mapWorkStateToServiceLogPatch(state) {
+  return {
+    ...mapReadingsWorkStateToServiceLogPatch(state),
+    ...mapChemicalWorkStateToServiceLogPatch(state),
   };
 }
 
 /**
  * @param {string} propertyId uuid
  * @param {string} techSlug
- * @param {object} data
+ * @param {object} patch
  */
-export async function upsertServiceLog(propertyId, techSlug, data) {
+export async function upsertServiceLog(propertyId, techSlug, patch) {
   const payload = {
     property_id: propertyId,
     technician_slug: techSlug,
     service_date: todayISO(),
-    ...data,
+    ...patch,
   };
 
   const onConflict = "property_id,service_date";
+  const chemicalUpsert = patchIncludesChemicalColumns(patch);
+  if (chemicalUpsert) {
+    console.log("chemical payload", payload);
+  }
+
   console.log("Supabase write about to run", {
     property_id: payload.property_id,
     service_date: payload.service_date,
     onConflict,
   });
 
-  const { data: row, error } = await supabase
+  const { data, error } = await supabase
     .from("service_logs")
     .upsert(payload, {
       onConflict,
@@ -74,11 +115,17 @@ export async function upsertServiceLog(propertyId, techSlug, data) {
     .maybeSingle();
 
   if (error) {
+    if (chemicalUpsert) {
+      console.error("chemical save failed", error);
+    }
     console.error("Supabase write failed", error);
     throw error;
   }
-  console.log("Supabase write ok", row);
-  return row;
+  if (chemicalUpsert) {
+    console.log("chemical result", data);
+  }
+  console.log("Supabase write ok", data);
+  return data;
 }
 
 export async function getServiceLogsForToday(techSlug) {
