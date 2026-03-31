@@ -247,3 +247,15 @@ export async function patchRouteSettings(propertyId, settings) {
   }
 }
 
+export function resetSupabaseCaches() {
+  serviceLogsByTech.clear();
+  activityByTech.clear();
+  routeSettingsCache.byPropertyId.clear();
+  routeSettingsCache.loadedAt = 0;
+  propertiesCache.byId.clear();
+  propertiesCache.bySlug.clear();
+  propertiesCache.loadedAt = 0;
+  inflight.clear();
+  emitter.emit();
+}
+
