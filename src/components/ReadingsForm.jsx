@@ -1,5 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./ReadingsForm.module.css";
+import {
+  registerWorkFlush,
+  unregisterWorkFlush,
+} from "../utils/workFlushRegistry.js";
 
 const pair = () => ({ before: "", after: "" });
 
@@ -200,6 +204,26 @@ export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange 
   const [poolChem, setPoolChem] = useState(emptyChem);
   const [spaChem, setSpaChem] = useState(emptyChem);
 
+  const stateRef = useRef({ pool, spa, poolChem, spaChem });
+  useEffect(() => {
+    stateRef.current = { pool, spa, poolChem, spaChem };
+  }, [pool, spa, poolChem, spaChem]);
+
+  const onWorkRef = useRef(onWorkStateChange);
+  onWorkRef.current = onWorkStateChange;
+
+  useEffect(() => {
+    if (!onWorkStateChange) return undefined;
+    const flush = () => onWorkRef.current?.(stateRef.current);
+    registerWorkFlush(flush);
+    return () => {
+      unregisterWorkFlush();
+      flush();
+    };
+    // Intentionally once per mount: flush on unmount only (refs hold latest state/callback).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const setPoolCell = (key, side, value) => {
     setPool((p) => ({
       ...p,
@@ -225,7 +249,7 @@ export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange 
   useEffect(() => {
     if (!onWorkStateChange) return undefined;
     const id = window.setTimeout(() => {
-      onWorkStateChange({ pool, spa, poolChem, spaChem });
+      onWorkRef.current?.(stateRef.current);
     }, 1200);
     return () => clearTimeout(id);
   }, [pool, spa, poolChem, spaChem, onWorkStateChange]);

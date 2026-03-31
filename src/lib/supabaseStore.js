@@ -149,8 +149,15 @@ export async function ensureServiceLogsForToday(techSlug) {
   if (!techSlug) return;
   return deduped(`service:${techSlug}`, async () => {
     const rows = await getServiceLogsForToday(techSlug);
-    const byId = new Map(rows.map((r) => [r.property_id, r]));
-    serviceLogsByTech.set(techSlug, { loadedAt: Date.now(), rowsByPropertyId: byId });
+    const prev = serviceLogsByTech.get(techSlug)?.rowsByPropertyId ?? new Map();
+    const next = new Map(prev);
+    for (const r of rows) {
+      if (!r?.property_id) continue;
+      const id = r.property_id;
+      const existing = next.get(id);
+      next.set(id, existing ? { ...existing, ...r } : r);
+    }
+    serviceLogsByTech.set(techSlug, { loadedAt: Date.now(), rowsByPropertyId: next });
     emitter.emit();
   });
 }
@@ -212,8 +219,8 @@ export async function patchServiceLog(techSlug, propertyId, patch) {
     block.rowsByPropertyId.set(propertyId, saved);
     serviceLogsByTech.set(techSlug, block);
     emitter.emit();
-  } catch {
-    // keep optimistic; UI stays usable even if network is slow
+  } catch (e) {
+    console.error("patchServiceLog failed:", e);
   }
 }
 

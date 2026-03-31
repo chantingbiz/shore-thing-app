@@ -106,6 +106,9 @@ export async function upsertServiceLog(propertyId, techSlug, patch) {
     onConflict,
   });
 
+  const row = payload;
+  console.log("UPSERT ROW:", row);
+
   const { data, error } = await supabase
     .from("service_logs")
     .upsert(payload, {

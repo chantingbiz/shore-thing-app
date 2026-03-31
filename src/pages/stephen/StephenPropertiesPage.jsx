@@ -17,6 +17,7 @@ import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
 import { primePropertiesBySlug, primeTechnicianToday } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
+import { flushPendingWorkNow } from "../../utils/workFlushRegistry.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./StephenPropertiesPage.module.css";
 
@@ -50,6 +51,7 @@ export default function StephenPropertiesPage() {
   const toggleCompleted = useCallback((p, e) => {
     e.preventDefault();
     e.stopPropagation();
+    flushPendingWorkNow();
     const next = !isPropertyCompletedToday(TECH_SLUG, p.slug);
     setPropertyCompletedForDay(TECH_SLUG, p.slug, next);
     if (next) {
