@@ -81,6 +81,42 @@ export function mapWorkStateToServiceLogPatch(state) {
   };
 }
 
+const str = (v) => (v == null ? "" : String(v));
+
+/**
+ * Inverse of mapWorkStateToServiceLogPatch for hydrating ReadingsForm from a service_logs row.
+ * @param {Record<string, unknown> | null | undefined} row
+ */
+export function workStateFromServiceLogRow(row) {
+  if (!row) return null;
+  return {
+    pool: {
+      tb: { before: str(row.pool_tb_before), after: str(row.pool_tb_after) },
+      fc: { before: str(row.pool_fc_before), after: str(row.pool_fc_after) },
+      ph: { before: str(row.pool_ph_before), after: str(row.pool_ph_after) },
+      ta: { before: str(row.pool_ta_before), after: str(row.pool_ta_after) },
+      poolTemp: { before: str(row.pool_temp_set), after: "" },
+    },
+    spa: {
+      tb: { before: str(row.spa_tb_before), after: str(row.spa_tb_after) },
+      fc: { before: str(row.spa_fc_before), after: str(row.spa_fc_after) },
+      ph: { before: str(row.spa_ph_before), after: str(row.spa_ph_after) },
+      ta: { before: str(row.spa_ta_before), after: str(row.spa_ta_after) },
+      spaTemp: { before: "", after: str(row.spa_temp) },
+    },
+    poolChem: {
+      pucks: str(row.pool_pucks),
+      granulated: str(row.pool_granulated),
+      ta: str(row.pool_ta_added),
+    },
+    spaChem: {
+      pucks: str(row.spa_mini_pucks),
+      granulated: str(row.spa_granulated),
+      ta: str(row.spa_ta_added),
+    },
+  };
+}
+
 /**
  * @param {string} propertyId uuid
  * @param {string} techSlug

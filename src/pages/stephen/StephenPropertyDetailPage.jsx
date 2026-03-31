@@ -7,6 +7,7 @@ import ReadingsForm from "../../components/ReadingsForm.jsx";
 import { logTechnicianActivity } from "../../utils/activityLog.js";
 import { getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
 import {
+  getServiceLogRow,
   patchServiceLog,
   primePropertiesBySlug,
   primeTechnicianToday,
@@ -94,6 +95,9 @@ export default function StephenPropertyDetailPage() {
     }
   }, [propertySlug]);
 
+  const resolved = property ? resolveDbPropertyId(property.slug) : null;
+  const serviceLogRow = resolved ? getServiceLogRow("stephen", resolved) : null;
+
   if (!property) {
     return <Navigate to="/technician/stephen" replace />;
   }
@@ -119,6 +123,7 @@ export default function StephenPropertyDetailPage() {
         <ReadingsForm
           idPrefix={property.slug}
           onWorkStateChange={handleWorkStateChange}
+          serviceLogRow={serviceLogRow}
         />
       </div>
     </SubpageTemplate>

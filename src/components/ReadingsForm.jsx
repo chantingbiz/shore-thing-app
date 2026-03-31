@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./ReadingsForm.module.css";
+import { workStateFromServiceLogRow } from "../lib/api.js";
 import {
   registerWorkFlush,
   unregisterWorkFlush,
@@ -186,7 +187,11 @@ function BeforeAfterSection({
   );
 }
 
-export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange }) {
+export default function ReadingsForm({
+  idPrefix = "readings",
+  onWorkStateChange,
+  serviceLogRow,
+}) {
   const [pool, setPool] = useState(() => ({
     tb: pair(),
     fc: pair(),
@@ -212,6 +217,25 @@ export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange 
   const onWorkRef = useRef(onWorkStateChange);
   onWorkRef.current = onWorkStateChange;
 
+  const hydratedFromRow = useRef(false);
+  const hasUserEditedRef = useRef(false);
+  useEffect(() => {
+    hydratedFromRow.current = false;
+    hasUserEditedRef.current = false;
+  }, [idPrefix]);
+
+  useEffect(() => {
+    if (!serviceLogRow) return;
+    if (hydratedFromRow.current || hasUserEditedRef.current) return;
+    const ws = workStateFromServiceLogRow(serviceLogRow);
+    if (!ws) return;
+    hydratedFromRow.current = true;
+    setPool(ws.pool);
+    setSpa(ws.spa);
+    setPoolChem(ws.poolChem);
+    setSpaChem(ws.spaChem);
+  }, [serviceLogRow, idPrefix]);
+
   useEffect(() => {
     if (!onWorkStateChange) return undefined;
     const flush = () => onWorkRef.current?.(stateRef.current);
@@ -225,6 +249,7 @@ export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange 
   }, []);
 
   const setPoolCell = (key, side, value) => {
+    hasUserEditedRef.current = true;
     setPool((p) => ({
       ...p,
       [key]: { ...p[key], [side]: value },
@@ -232,6 +257,7 @@ export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange 
   };
 
   const setSpaCell = (key, side, value) => {
+    hasUserEditedRef.current = true;
     setSpa((p) => ({
       ...p,
       [key]: { ...p[key], [side]: value },
@@ -239,10 +265,12 @@ export default function ReadingsForm({ idPrefix = "readings", onWorkStateChange 
   };
 
   const setPoolChemField = (key, value) => {
+    hasUserEditedRef.current = true;
     setPoolChem((c) => ({ ...c, [key]: value }));
   };
 
   const setSpaChemField = (key, value) => {
+    hasUserEditedRef.current = true;
     setSpaChem((c) => ({ ...c, [key]: value }));
   };
 

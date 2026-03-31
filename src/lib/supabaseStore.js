@@ -45,7 +45,11 @@ export function subscribeToSupabaseChanges() {
       "postgres_changes",
       { event: "*", schema: "public", table: "service_logs" },
       () => {
-        // refetch is keyed by tech when UI asks; just notify to trigger rerender
+        const slugs = [...serviceLogsByTech.keys()];
+        const toFetch = slugs.length ? slugs : ["stephen"];
+        for (const techSlug of toFetch) {
+          void ensureServiceLogsForToday(techSlug);
+        }
         emitter.emit();
       }
     )
@@ -153,9 +157,7 @@ export async function ensureServiceLogsForToday(techSlug) {
     const next = new Map(prev);
     for (const r of rows) {
       if (!r?.property_id) continue;
-      const id = r.property_id;
-      const existing = next.get(id);
-      next.set(id, existing ? { ...existing, ...r } : r);
+      next.set(r.property_id, r);
     }
     serviceLogsByTech.set(techSlug, { loadedAt: Date.now(), rowsByPropertyId: next });
     emitter.emit();
@@ -216,7 +218,7 @@ export async function patchServiceLog(techSlug, propertyId, patch) {
 
   try {
     const saved = await upsertServiceLog(propertyId, techSlug, patch);
-    block.rowsByPropertyId.set(propertyId, saved);
+    block.rowsByPropertyId.set(propertyId, saved ?? next);
     serviceLogsByTech.set(techSlug, block);
     emitter.emit();
   } catch (e) {
