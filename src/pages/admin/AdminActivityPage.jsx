@@ -8,7 +8,9 @@ import {
   formatActivityTime,
   getFirstActivityTimestampToday,
 } from "../../utils/activityLog.js";
-import { getTechnicianRouteDaySummary } from "../../utils/technicianPropertyStatus.js";
+import {
+  getTechnicianRouteDaySummaryByPropertyId,
+} from "../../utils/technicianPropertyStatus.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
 import { primeTechnicianToday } from "../../lib/supabaseStore.js";
@@ -60,7 +62,7 @@ export default function AdminActivityPage() {
           const first = getFirstActivityTimestampToday(t.slug);
           const routeProps = getTechnicianRouteProperties(t.slug);
           const { total, completedCount, inProgressCount } =
-            getTechnicianRouteDaySummary(t.slug, routeProps);
+            getTechnicianRouteDaySummaryByPropertyId(t.slug, routeProps);
           const showRouteStats = total > 0;
           return (
             <Link

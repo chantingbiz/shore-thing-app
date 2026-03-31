@@ -1,5 +1,6 @@
 import {
   getActivityLogsForToday,
+  getPropertiesByIds,
   getPropertiesBySlugs,
   getRouteSettings,
   getServiceLogsForToday,
@@ -31,8 +32,8 @@ const serviceLogsByTech = new Map();
 const activityByTech = new Map();
 /** @type {{ loadedAt: number, byPropertyId: Map<string, any> }} */
 const routeSettingsCache = { loadedAt: 0, byPropertyId: new Map() };
-/** @type {{ loadedAt: number, bySlug: Map<string, { id: string, property_slug: string }> }} */
-const propertiesCache = { loadedAt: 0, bySlug: new Map() };
+/** @type {{ loadedAt: number, bySlug: Map<string, any>, byId: Map<string, any> }} */
+const propertiesCache = { loadedAt: 0, bySlug: new Map(), byId: new Map() };
 
 /** Basic protection against spamming fetch on rapid changes */
 const inflight = new Map();
@@ -107,6 +108,7 @@ export async function ensurePropertiesBySlug(propertySlugs) {
     for (const r of rows) {
       if (r?.property_slug && r?.id) {
         propertiesCache.bySlug.set(String(r.property_slug).toLowerCase(), r);
+        propertiesCache.byId.set(String(r.id), r);
       }
     }
     propertiesCache.loadedAt = Date.now();
@@ -117,6 +119,30 @@ export async function ensurePropertiesBySlug(propertySlugs) {
 export function resolveDbPropertyId(propertySlug) {
   if (!propertySlug) return null;
   return propertiesCache.bySlug.get(String(propertySlug).toLowerCase())?.id ?? null;
+}
+
+export function getPropertyById(propertyId) {
+  if (!propertyId) return null;
+  return propertiesCache.byId.get(String(propertyId)) ?? null;
+}
+
+export async function ensurePropertiesById(propertyIds) {
+  const ids = (propertyIds ?? []).filter(Boolean);
+  if (!ids.length) return;
+  const key = `propertiesById:${ids.slice().sort().join(",")}`;
+  return deduped(key, async () => {
+    const rows = await getPropertiesByIds(ids);
+    for (const r of rows) {
+      if (r?.id) {
+        propertiesCache.byId.set(String(r.id), r);
+        if (r?.property_slug) {
+          propertiesCache.bySlug.set(String(r.property_slug).toLowerCase(), r);
+        }
+      }
+    }
+    propertiesCache.loadedAt = Date.now();
+    emitter.emit();
+  });
 }
 
 export async function ensureServiceLogsForToday(techSlug) {

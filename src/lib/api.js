@@ -168,9 +168,20 @@ export async function getPropertiesBySlugs(propertySlugs) {
 
   const { data, error } = await supabase
     .from("properties")
-    .select("id,property_slug")
+    .select("id,property_slug,name,address")
     .in("property_slug", slugs);
 
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getPropertiesByIds(propertyIds) {
+  const ids = (propertyIds ?? []).filter(Boolean);
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id,property_slug,name,address")
+    .in("id", ids);
   if (error) throw error;
   return data ?? [];
 }

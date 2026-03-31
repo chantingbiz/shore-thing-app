@@ -1,7 +1,9 @@
 import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
 import {
   ensureActivityForToday,
+  ensurePropertiesById,
   getActivityEvents,
+  getPropertyById,
   insertActivity,
   primePropertiesBySlug,
   resolveDbPropertyId,
@@ -39,14 +41,25 @@ export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {
   void ensureActivityForToday(techSlug);
   const raw = getActivityEvents(techSlug);
   if (!raw.length) return null;
+
+  // ensure we have names for the properties referenced by activity logs
+  void ensurePropertiesById(raw.map((r) => r.property_id));
+
   const mapped = raw
-    .map((r) => ({
-      t: Date.parse(r.created_at),
-      propertySlug: String(r.property_id),
-      propertyName: "Property",
-      type: r.event_type,
-      label: r.event_label ?? r.event_type,
-    }))
+    .map((r) => {
+      const prop = getPropertyById(r.property_id);
+      return {
+        t: Date.parse(r.created_at),
+        // Keep the existing UI shape (propertySlug used for grouping/links).
+        // For admin routes, we still link using a slug when available.
+        propertySlug: prop?.property_slug ?? String(r.property_id),
+        propertyName: prop?.name ?? "Property",
+        type: r.event_type,
+        label: r.event_label ?? r.event_type,
+        propertyId: r.property_id,
+        propertyAddress: prop?.address ?? null,
+      };
+    })
     .filter((e) => Number.isFinite(e.t));
   if (!mapped.length) return null;
   const firstAt = mapped.reduce((min, e) => (min == null ? e.t : Math.min(min, e.t)), null);

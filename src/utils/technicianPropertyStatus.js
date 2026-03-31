@@ -1,6 +1,12 @@
 import { getLastInteractionTimestamp } from "./activityLog.js";
 import { getLocalDayKey } from "./localDay.js";
 import { isPropertyCompletedToday } from "./propertyCompletion.js";
+import {
+  ensureActivityForToday,
+  getActivityEvents,
+  primePropertiesBySlug,
+  resolveDbPropertyId,
+} from "../lib/supabaseStore.js";
 
 /**
  * Whether any technician activity was logged today for this property.
@@ -55,5 +61,43 @@ export function getTechnicianRouteDaySummary(
       inProgressCount++;
     }
   }
+  return { total, completedCount, inProgressCount };
+}
+
+/**
+ * Admin summary using property_id-based activity lookup.
+ * - completed uses service_logs.completed (via isPropertyCompletedToday which resolves slug->id)
+ * - in_progress counts any activity_logs row today for that property_id when not completed
+ *
+ * @param {string} techSlug
+ * @param {Array<{ slug: string }>} routeProperties
+ * @param {string} [dayKey]
+ */
+export function getTechnicianRouteDaySummaryByPropertyId(
+  techSlug,
+  routeProperties,
+  dayKey = getLocalDayKey()
+) {
+  void dayKey;
+  primePropertiesBySlug(routeProperties.map((p) => p.slug));
+  void ensureActivityForToday(techSlug);
+  const events = getActivityEvents(techSlug);
+
+  const total = routeProperties.length;
+  let completedCount = 0;
+  let inProgressCount = 0;
+
+  for (const p of routeProperties) {
+    const slug = p.slug;
+    const id = resolveDbPropertyId(slug);
+    if (isPropertyCompletedToday(techSlug, slug, dayKey)) {
+      completedCount++;
+      continue;
+    }
+    if (!id) continue;
+    const hasActivity = events.some((e) => e.property_id === id);
+    if (hasActivity) inProgressCount++;
+  }
+
   return { total, completedCount, inProgressCount };
 }

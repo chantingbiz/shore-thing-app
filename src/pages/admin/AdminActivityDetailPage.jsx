@@ -10,7 +10,7 @@ import {
 } from "../../utils/activityLog.js";
 import {
   getAdminPropertyDayStatus,
-  getTechnicianRouteDaySummary,
+  getTechnicianRouteDaySummaryByPropertyId,
 } from "../../utils/technicianPropertyStatus.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
@@ -54,13 +54,13 @@ export default function AdminActivityDetailPage() {
     );
   }
 
-  primeTechnicianToday("stephen", getTechnicianRouteProperties("stephen").map((p) => p.id));
+  primeTechnicianToday("stephen", []);
   void refreshTick;
   const firstAt = getFirstActivityTimestampToday("stephen");
   const properties = getPropertiesTouchedToday("stephen");
   const rawEvents = getTechnicianEventsToday("stephen");
   const groupedEvents = getGroupedDisplayEvents(rawEvents);
-  const { total, completedCount, inProgressCount } = getTechnicianRouteDaySummary(
+  const { total, completedCount, inProgressCount } = getTechnicianRouteDaySummaryByPropertyId(
     tech.slug,
     getTechnicianRouteProperties(tech.slug)
   );
