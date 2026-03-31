@@ -21,7 +21,7 @@ export function logTechnicianActivity(techSlug, payload) {
   const prop =
     techSlug === "stephen" ? getStephenPropertyBySlug(payload.propertySlug) : null;
   if (!prop?.id) return;
-  void insertActivity(techSlug, prop.id, payload.type);
+  void insertActivity(techSlug, prop.id, payload.type, payload.label || payload.type);
 }
 
 export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {
@@ -36,8 +36,8 @@ export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {
         t: Date.parse(r.created_at),
         propertySlug: prop?.slug ?? String(r.property_id),
         propertyName: prop?.name ?? "Property",
-        type: r.action_type,
-        label: r.action_type,
+        type: r.event_type,
+        label: r.event_label ?? r.event_type,
       };
     })
     .filter((e) => Number.isFinite(e.t));

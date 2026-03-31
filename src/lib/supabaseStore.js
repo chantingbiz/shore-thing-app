@@ -163,12 +163,12 @@ export async function patchServiceLog(techSlug, propertyId, patch) {
   }
 }
 
-export async function insertActivity(techSlug, propertyId, actionType) {
-  if (!techSlug || !propertyId || !actionType) return;
+export async function insertActivity(techSlug, propertyId, eventType, eventLabel) {
+  if (!techSlug || !propertyId || !eventType) return;
   try {
-    await logActivity(techSlug, propertyId, actionType);
-  } catch {
-    /* ignore */
+    await logActivity(techSlug, propertyId, eventType, eventLabel ?? eventType);
+  } catch (error) {
+    console.error("Supabase write failed", error);
   }
   // Prefer refetch via realtime; but also nudge UI
   emitter.emit();
@@ -188,8 +188,8 @@ export async function patchRouteSettings(propertyId, settings) {
     routeSettingsCache.byPropertyId.set(propertyId, saved ?? { ...prev, ...settings });
     routeSettingsCache.loadedAt = Date.now();
     emitter.emit();
-  } catch {
-    /* keep optimistic */
+  } catch (error) {
+    console.error("Supabase write failed", error);
   }
 }
 

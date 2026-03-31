@@ -23,7 +23,7 @@ export default function AdminActivityPropertyPage() {
   }
 
   primeTechnicianToday("stephen", [property.id]);
-  const snapshot = getServiceLogRow("stephen", property.id)?.readings_json ?? null;
+  const serviceLog = getServiceLogRow("stephen", property.id) ?? null;
   const status = getAdminPropertyDayStatus("stephen", property.slug);
   const completedAt = getPropertyCompletedAt("stephen", property.slug);
 
@@ -50,7 +50,7 @@ export default function AdminActivityPropertyPage() {
         </p>
       ) : null}
       <AdminReadOnlyWorkView
-        snapshot={snapshot}
+        serviceLog={serviceLog}
         techSlug={techSlug}
         propertyId={property.id}
       />

@@ -50,7 +50,7 @@ function formatChem(val, suffix) {
 }
 
 export default function AdminReadOnlyWorkView({
-  snapshot,
+  serviceLog,
   techSlug,
   propertyId,
 }) {
@@ -61,10 +61,30 @@ export default function AdminReadOnlyWorkView({
     return () => window.clearInterval(id);
   }, []);
 
-  const pool = snapshot?.pool ?? {};
-  const spa = snapshot?.spa ?? {};
-  const poolChem = snapshot?.poolChem ?? {};
-  const spaChem = snapshot?.spaChem ?? {};
+  const pool = {
+    tb: { before: serviceLog?.pool_tb_before, after: serviceLog?.pool_tb_after },
+    fc: { before: serviceLog?.pool_fc_before, after: serviceLog?.pool_fc_after },
+    ph: { before: serviceLog?.pool_ph_before, after: serviceLog?.pool_ph_after },
+    ta: { before: serviceLog?.pool_ta_before, after: serviceLog?.pool_ta_after },
+    poolTemp: { before: serviceLog?.pool_temp_set, after: "" },
+  };
+  const spa = {
+    tb: { before: serviceLog?.spa_tb_before, after: serviceLog?.spa_tb_after },
+    fc: { before: serviceLog?.spa_fc_before, after: serviceLog?.spa_fc_after },
+    ph: { before: serviceLog?.spa_ph_before, after: serviceLog?.spa_ph_after },
+    ta: { before: serviceLog?.spa_ta_before, after: serviceLog?.spa_ta_after },
+    spaTemp: { before: "", after: serviceLog?.spa_temp },
+  };
+  const poolChem = {
+    pucks: serviceLog?.pool_pucks,
+    granulated: serviceLog?.pool_granulated,
+    ta: serviceLog?.pool_ta_added,
+  };
+  const spaChem = {
+    pucks: serviceLog?.spa_mini_pucks,
+    granulated: serviceLog?.spa_granulated,
+    ta: serviceLog?.spa_ta_added,
+  };
 
   const poolTs = getPoolStart(techSlug, propertyId);
   const spaTs = getSpaStart(techSlug, propertyId);
@@ -153,17 +173,9 @@ export default function AdminReadOnlyWorkView({
         ))}
       </section>
 
-      {snapshot?.savedAt ? (
-        <p className={styles.saved}>
-          Snapshot saved:{" "}
-          {new Date(snapshot.savedAt).toLocaleString(undefined, {
-            dateStyle: "short",
-            timeStyle: "short",
-          })}
-        </p>
-      ) : (
-        <p className={styles.saved}>No saved readings snapshot for this property yet.</p>
-      )}
+      <p className={styles.saved}>
+        {serviceLog ? "Service log loaded for today." : "No service log for today yet."}
+      </p>
     </div>
   );
 }

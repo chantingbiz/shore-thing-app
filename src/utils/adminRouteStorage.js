@@ -3,13 +3,13 @@ import { getRouteSettingsRow, patchRouteSettings } from "../lib/supabaseStore.js
 /** @returns {'guest'|'check'|null} */
 export function getGuestCheckMode(propertyId) {
   const row = getRouteSettingsRow(propertyId);
-  const v = row?.guest_or_check;
+  const v = row?.guest_check;
   return v === "guest" || v === "check" ? v : null;
 }
 
 export function setGuestCheckMode(propertyId, mode) {
   const v = mode === "guest" || mode === "check" ? mode : null;
-  void patchRouteSettings(propertyId, { guest_or_check: v });
+  void patchRouteSettings(propertyId, { guest_check: v });
 }
 
 /** @returns {'heat'|'no_heat'|null} */

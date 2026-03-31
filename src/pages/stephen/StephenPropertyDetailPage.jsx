@@ -8,6 +8,7 @@ import { logTechnicianActivity } from "../../utils/activityLog.js";
 import { getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
 import { patchServiceLog, primeTechnicianToday } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
+import { mapWorkStateToServiceLogPatch } from "../../lib/api.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./StephenPropertyDetailPage.module.css";
 
@@ -42,15 +43,7 @@ export default function StephenPropertyDetailPage() {
     const poolHose = getPoolStart("stephen", prop.id) != null;
     const spaHose = getSpaStart("stephen", prop.id) != null;
     void patchServiceLog("stephen", prop.id, {
-      readings_json: {
-        pool: state.pool,
-        spa: state.spa,
-        poolChem: state.poolChem,
-        spaChem: state.spaChem,
-        poolHoseActive: poolHose,
-        spaHoseActive: spaHose,
-        savedAt: Date.now(),
-      },
+      ...mapWorkStateToServiceLogPatch(state),
     });
 
     const r = JSON.stringify({ pool: state.pool, spa: state.spa });
