@@ -15,12 +15,15 @@ import {
 import { sortPropertiesForTechnicianList } from "../../utils/technicianPropertyOrder.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
+import { primeTechnicianToday } from "../../lib/supabaseStore.js";
+import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./StephenPropertiesPage.module.css";
 
 const TECH_SLUG = "stephen";
 
 export default function StephenPropertiesPage() {
+  useSupabaseSyncTick();
   const [now, setNow] = useState(() => Date.now());
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -30,19 +33,10 @@ export default function StephenPropertiesPage() {
   }, []);
 
   useEffect(() => {
-    const onStorage = (e) => {
-      if (
-        e.key &&
-        (e.key.startsWith("hose_pool_") ||
-          e.key.startsWith("hose_spa_") ||
-          e.key === "shore_activity_log_v1" ||
-          e.key === "shore_property_completion_v1")
-      ) {
-        setRefreshTick((n) => n + 1);
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    primeTechnicianToday(
+      TECH_SLUG,
+      STEPHEN_PROPERTIES.map((p) => p.id)
+    );
   }, []);
 
   const sorted = useMemo(() => {
@@ -85,8 +79,8 @@ export default function StephenPropertiesPage() {
       </div>
       <nav className={styles.list} aria-label="Stephen properties">
         {sorted.map((p) => {
-          const poolTs = getPoolStart(p.slug);
-          const spaTs = getSpaStart(p.slug);
+          const poolTs = getPoolStart(TECH_SLUG, p.id);
+          const spaTs = getSpaStart(TECH_SLUG, p.id);
           const poolSec =
             poolTs != null ? elapsedSecondsSince(poolTs, now) : null;
           const spaSec =
@@ -132,7 +126,7 @@ export default function StephenPropertiesPage() {
                   </div>
                 </div>
                 <RouteParamBadges
-                  propertySlug={p.slug}
+                  propertyId={p.id}
                   className={styles.routeBadges}
                 />
                 <span className={styles.cardAddress}>{p.address}</span>

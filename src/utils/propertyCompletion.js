@@ -1,25 +1,6 @@
+import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
+import { getServiceLogRow, patchServiceLog } from "../lib/supabaseStore.js";
 import { getLocalDayKey } from "./localDay.js";
-
-const STORAGE_KEY = "shore_property_completion_v1";
-
-function loadRoot() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const p = JSON.parse(raw);
-    return typeof p === "object" && p !== null ? p : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveRoot(root) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(root));
-  } catch {
-    /* ignore */
-  }
-}
 
 /**
  * @param {string} techSlug
@@ -33,19 +14,16 @@ export function setPropertyCompletedForDay(
   completed,
   dayKey = getLocalDayKey()
 ) {
+  void dayKey;
   if (!techSlug || !propertySlug) return;
-  const root = loadRoot();
-  if (!root[dayKey]) root[dayKey] = {};
-  if (!root[dayKey][techSlug]) root[dayKey][techSlug] = {};
-  if (completed) {
-    root[dayKey][techSlug][propertySlug] = { completedAt: Date.now() };
-  } else {
-    delete root[dayKey][techSlug][propertySlug];
-    if (Object.keys(root[dayKey][techSlug]).length === 0) {
-      delete root[dayKey][techSlug];
-    }
-  }
-  saveRoot(root);
+  const prop =
+    techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
+  if (!prop?.id) return;
+  const nowIso = new Date().toISOString();
+  void patchServiceLog(techSlug, prop.id, {
+    completed: !!completed,
+    completed_at: completed ? nowIso : null,
+  });
 }
 
 export function isPropertyCompletedToday(
@@ -53,9 +31,13 @@ export function isPropertyCompletedToday(
   propertySlug,
   dayKey = getLocalDayKey()
 ) {
+  void dayKey;
   if (!techSlug || !propertySlug) return false;
-  const root = loadRoot();
-  return !!root[dayKey]?.[techSlug]?.[propertySlug];
+  const prop =
+    techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
+  if (!prop?.id) return false;
+  const row = getServiceLogRow(techSlug, prop.id);
+  return !!row?.completed;
 }
 
 export function getPropertyCompletedAt(
@@ -63,6 +45,12 @@ export function getPropertyCompletedAt(
   propertySlug,
   dayKey = getLocalDayKey()
 ) {
-  const root = loadRoot();
-  return root[dayKey]?.[techSlug]?.[propertySlug]?.completedAt ?? null;
+  void dayKey;
+  if (!techSlug || !propertySlug) return null;
+  const prop =
+    techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
+  if (!prop?.id) return null;
+  const row = getServiceLogRow(techSlug, prop.id);
+  const t = row?.completed_at ? Date.parse(row.completed_at) : null;
+  return Number.isFinite(t) ? t : null;
 }

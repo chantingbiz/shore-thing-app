@@ -15,9 +15,12 @@ import {
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
 import detailStyles from "./AdminActivityDetailPage.module.css";
+import { primeTechnicianToday } from "../../lib/supabaseStore.js";
+import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 
 export default function AdminActivityDetailPage() {
   const { techSlug } = useParams();
+  useSupabaseSyncTick();
   const [, setPoll] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -51,6 +54,7 @@ export default function AdminActivityDetailPage() {
     );
   }
 
+  primeTechnicianToday("stephen", getTechnicianRouteProperties("stephen").map((p) => p.id));
   void refreshTick;
   const firstAt = getFirstActivityTimestampToday("stephen");
   const properties = getPropertiesTouchedToday("stephen");

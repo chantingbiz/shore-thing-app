@@ -49,7 +49,11 @@ function formatChem(val, suffix) {
   return suffix ? `${val} ${suffix}` : String(val);
 }
 
-export default function AdminReadOnlyWorkView({ snapshot, propertySlug }) {
+export default function AdminReadOnlyWorkView({
+  snapshot,
+  techSlug,
+  propertyId,
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -62,8 +66,8 @@ export default function AdminReadOnlyWorkView({ snapshot, propertySlug }) {
   const poolChem = snapshot?.poolChem ?? {};
   const spaChem = snapshot?.spaChem ?? {};
 
-  const poolTs = getPoolStart(propertySlug);
-  const spaTs = getSpaStart(propertySlug);
+  const poolTs = getPoolStart(techSlug, propertyId);
+  const spaTs = getSpaStart(techSlug, propertyId);
   const poolRun =
     poolTs != null
       ? formatHoseElapsed(Math.floor((now - poolTs) / 1000))

@@ -16,6 +16,7 @@ import styles from "./PropertyHoseControls.module.css";
 
 export default function PropertyHoseControls({
   propertySlug,
+  propertyId,
   technicianSlug,
   propertyName,
   enableActivityLog = false,
@@ -27,13 +28,13 @@ export default function PropertyHoseControls({
   const [spaActive, setSpaActive] = useState(false);
 
   useEffect(() => {
-    const poolTs = getPoolStart(propertySlug);
-    const spaTs = getSpaStart(propertySlug);
+    const poolTs = getPoolStart(technicianSlug, propertyId);
+    const spaTs = getSpaStart(technicianSlug, propertyId);
     poolStartRef.current = poolTs;
     spaStartRef.current = spaTs;
     setPoolActive(poolTs != null);
     setSpaActive(spaTs != null);
-  }, [propertySlug]);
+  }, [propertySlug, propertyId, technicianSlug]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -68,13 +69,13 @@ export default function PropertyHoseControls({
   const togglePool = () => {
     if (poolActive) {
       logHose("pool_hose_stopped", "Pool hose removed");
-      clearPool(propertySlug);
+      clearPool(technicianSlug, propertyId);
       poolStartRef.current = null;
       setPoolActive(false);
     } else {
       logHose("pool_hose_started", "Pool hose started");
       const ts = Date.now();
-      setPoolStart(propertySlug, ts);
+      setPoolStart(technicianSlug, propertyId, ts);
       poolStartRef.current = ts;
       setPoolActive(true);
     }
@@ -85,13 +86,13 @@ export default function PropertyHoseControls({
   const toggleSpa = () => {
     if (spaActive) {
       logHose("spa_hose_stopped", "Spa hose removed");
-      clearSpa(propertySlug);
+      clearSpa(technicianSlug, propertyId);
       spaStartRef.current = null;
       setSpaActive(false);
     } else {
       logHose("spa_hose_started", "Spa hose started");
       const ts = Date.now();
-      setSpaStart(propertySlug, ts);
+      setSpaStart(technicianSlug, propertyId, ts);
       spaStartRef.current = ts;
       setSpaActive(true);
     }

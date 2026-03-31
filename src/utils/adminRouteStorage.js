@@ -1,57 +1,35 @@
-export function guestCheckKey(propertySlug) {
-  return `admin_route_guest_check_${propertySlug}`;
-}
-
-export function poolHeatKey(propertySlug) {
-  return `admin_route_pool_heat_${propertySlug}`;
-}
+import { getRouteSettingsRow, patchRouteSettings } from "../lib/supabaseStore.js";
 
 /** @returns {'guest'|'check'|null} */
-export function getGuestCheckMode(propertySlug) {
-  try {
-    const v = localStorage.getItem(guestCheckKey(propertySlug));
-    if (v === "guest" || v === "check") return v;
-    return null;
-  } catch {
-    return null;
-  }
+export function getGuestCheckMode(propertyId) {
+  const row = getRouteSettingsRow(propertyId);
+  const v = row?.guest_or_check;
+  return v === "guest" || v === "check" ? v : null;
 }
 
-export function setGuestCheckMode(propertySlug, mode) {
-  try {
-    if (mode == null) localStorage.removeItem(guestCheckKey(propertySlug));
-    else localStorage.setItem(guestCheckKey(propertySlug), mode);
-  } catch {
-    /* ignore */
-  }
+export function setGuestCheckMode(propertyId, mode) {
+  const v = mode === "guest" || mode === "check" ? mode : null;
+  void patchRouteSettings(propertyId, { guest_or_check: v });
 }
 
 /** @returns {'heat'|'no_heat'|null} */
-export function getPoolHeatMode(propertySlug) {
-  try {
-    const v = localStorage.getItem(poolHeatKey(propertySlug));
-    if (v === "heat" || v === "no_heat") return v;
-    return null;
-  } catch {
-    return null;
-  }
+export function getPoolHeatMode(propertyId) {
+  const row = getRouteSettingsRow(propertyId);
+  const v = row?.pool_heat;
+  return v === "heat" || v === "no_heat" ? v : null;
 }
 
-export function setPoolHeatMode(propertySlug, mode) {
-  try {
-    if (mode == null) localStorage.removeItem(poolHeatKey(propertySlug));
-    else localStorage.setItem(poolHeatKey(propertySlug), mode);
-  } catch {
-    /* ignore */
-  }
+export function setPoolHeatMode(propertyId, mode) {
+  const v = mode === "heat" || mode === "no_heat" ? mode : null;
+  void patchRouteSettings(propertyId, { pool_heat: v });
 }
 
 /** Display label for technician UI (matches admin segmented defaults when unset). */
-export function getGuestCheckLabel(propertySlug) {
-  return getGuestCheckMode(propertySlug) === "check" ? "Check" : "Guest";
+export function getGuestCheckLabel(propertyId) {
+  return getGuestCheckMode(propertyId) === "check" ? "Check" : "Guest";
 }
 
 /** Display label for technician UI (matches admin segmented defaults when unset). */
-export function getPoolHeatLabel(propertySlug) {
-  return getPoolHeatMode(propertySlug) === "no_heat" ? "No Pool Heat" : "Pool Heat";
+export function getPoolHeatLabel(propertyId) {
+  return getPoolHeatMode(propertyId) === "no_heat" ? "No Pool Heat" : "Pool Heat";
 }

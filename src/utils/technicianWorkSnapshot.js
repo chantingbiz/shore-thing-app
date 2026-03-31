@@ -1,39 +1,26 @@
-import { getPoolStart, getSpaStart } from "./hoseTimers.js";
+import { getServiceLogRow, patchServiceLog } from "../lib/supabaseStore.js";
 
 function snapshotKey(techSlug, propertySlug) {
   return `shore_work_snapshot_${techSlug}_${propertySlug}`;
 }
 
 export function saveWorkSnapshot(techSlug, propertySlug, data) {
-  try {
-    localStorage.setItem(
-      snapshotKey(techSlug, propertySlug),
-      JSON.stringify({
-        ...data,
-        savedAt: Date.now(),
-      })
-    );
-  } catch {
-    /* ignore */
-  }
+  // Work snapshot is persisted in service_logs.readings_json for realtime sync.
+  // We keep propertySlug in the function signature to avoid touching the UI, but
+  // callers should also upsert via service log using propertyId elsewhere.
+  void snapshotKey(techSlug, propertySlug);
+  // Intentionally no-op here; StephenPropertyDetailPage writes readings_json via service log.
 }
 
 export function loadWorkSnapshot(techSlug, propertySlug) {
-  try {
-    const raw = localStorage.getItem(snapshotKey(techSlug, propertySlug));
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  void snapshotKey(techSlug, propertySlug);
+  // Snapshot is now fetched from Supabase service log cache by propertyId in AdminActivityPropertyPage.
+  return null;
 }
 
 /** Merge current hose timer flags into the saved snapshot (readings may be empty). */
 export function patchHoseFlagsOnSnapshot(techSlug, propertySlug) {
-  const prev = loadWorkSnapshot(techSlug, propertySlug) || {};
-  saveWorkSnapshot(techSlug, propertySlug, {
-    ...prev,
-    poolHoseActive: getPoolStart(propertySlug) != null,
-    spaHoseActive: getSpaStart(propertySlug) != null,
-  });
+  void techSlug;
+  void propertySlug;
+  // No longer needed; hose state is derived from service_logs timestamps.
 }

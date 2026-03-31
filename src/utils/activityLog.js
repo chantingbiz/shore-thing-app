@@ -1,31 +1,16 @@
+import { getStephenPropertyById, getStephenPropertyBySlug } from "../data/stephenProperties.js";
+import {
+  ensureActivityForToday,
+  getActivityEvents,
+  insertActivity,
+} from "../lib/supabaseStore.js";
 import { getLocalDayKey } from "./localDay.js";
 import { isPropertyCompletedToday } from "./propertyCompletion.js";
 
 export { getLocalDayKey } from "./localDay.js";
 
-const STORAGE_KEY = "shore_activity_log_v1";
-
 /** Events within this span (same property + category) collapse to one admin line. */
 export const ACTIVITY_GROUP_WINDOW_MS = 90_000;
-
-function loadRoot() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const p = JSON.parse(raw);
-    return typeof p === "object" && p !== null ? p : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveRoot(root) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(root));
-  } catch {
-    /* ignore */
-  }
-}
 
 /**
  * @param {string} techSlug
@@ -33,28 +18,32 @@ function saveRoot(root) {
  */
 export function logTechnicianActivity(techSlug, payload) {
   if (!techSlug || !payload?.propertySlug) return;
-  const day = getLocalDayKey();
-  const t = Date.now();
-  const root = loadRoot();
-  if (!root[day]) root[day] = {};
-  if (!root[day][techSlug]) {
-    root[day][techSlug] = { firstAt: t, events: [] };
-  }
-  const block = root[day][techSlug];
-  const event = {
-    t,
-    propertySlug: payload.propertySlug,
-    propertyName: payload.propertyName,
-    type: payload.type,
-    label: payload.label || payload.type,
-  };
-  block.events.push(event);
-  saveRoot(root);
+  const prop =
+    techSlug === "stephen" ? getStephenPropertyBySlug(payload.propertySlug) : null;
+  if (!prop?.id) return;
+  void insertActivity(techSlug, prop.id, payload.type);
 }
 
 export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {
-  const root = loadRoot();
-  return root[dayKey]?.[techSlug] ?? null;
+  void dayKey;
+  void ensureActivityForToday(techSlug);
+  const raw = getActivityEvents(techSlug);
+  if (!raw.length) return null;
+  const mapped = raw
+    .map((r) => {
+      const prop = techSlug === "stephen" ? getStephenPropertyById(r.property_id) : null;
+      return {
+        t: Date.parse(r.created_at),
+        propertySlug: prop?.slug ?? String(r.property_id),
+        propertyName: prop?.name ?? "Property",
+        type: r.action_type,
+        label: r.action_type,
+      };
+    })
+    .filter((e) => Number.isFinite(e.t));
+  if (!mapped.length) return null;
+  const firstAt = mapped.reduce((min, e) => (min == null ? e.t : Math.min(min, e.t)), null);
+  return { firstAt, events: mapped };
 }
 
 export function getFirstActivityTimestampToday(techSlug) {

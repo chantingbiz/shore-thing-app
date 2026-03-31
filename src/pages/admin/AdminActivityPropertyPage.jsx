@@ -3,13 +3,15 @@ import { getStephenPropertyBySlug } from "../../data/stephenProperties.js";
 import { formatActivityTime } from "../../utils/activityLog.js";
 import { getPropertyCompletedAt } from "../../utils/propertyCompletion.js";
 import { getAdminPropertyDayStatus } from "../../utils/technicianPropertyStatus.js";
-import { loadWorkSnapshot } from "../../utils/technicianWorkSnapshot.js";
+import { getServiceLogRow, primeTechnicianToday } from "../../lib/supabaseStore.js";
+import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import AdminReadOnlyWorkView from "./AdminReadOnlyWorkView.jsx";
 import styles from "./adminShared.module.css";
 
 export default function AdminActivityPropertyPage() {
   const { techSlug, propertySlug } = useParams();
+  useSupabaseSyncTick();
 
   if (techSlug !== "stephen") {
     return <Navigate to="/administrator/activity" replace />;
@@ -20,7 +22,8 @@ export default function AdminActivityPropertyPage() {
     return <Navigate to={`/administrator/activity/${techSlug}`} replace />;
   }
 
-  const snapshot = loadWorkSnapshot("stephen", property.slug);
+  primeTechnicianToday("stephen", [property.id]);
+  const snapshot = getServiceLogRow("stephen", property.id)?.readings_json ?? null;
   const status = getAdminPropertyDayStatus("stephen", property.slug);
   const completedAt = getPropertyCompletedAt("stephen", property.slug);
 
@@ -48,7 +51,8 @@ export default function AdminActivityPropertyPage() {
       ) : null}
       <AdminReadOnlyWorkView
         snapshot={snapshot}
-        propertySlug={property.slug}
+        techSlug={techSlug}
+        propertyId={property.id}
       />
     </SubpageTemplate>
   );

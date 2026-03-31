@@ -1,63 +1,41 @@
-export function hosePoolKey(propertySlug) {
-  return `hose_pool_${propertySlug}`;
+import { getServiceLogRow, patchServiceLog } from "../lib/supabaseStore.js";
+
+/**
+ * Supabase-backed hose state.
+ * These getters remain synchronous (read from cache), while setters patch Supabase async.
+ */
+
+/** @returns {number|null} ms timestamp */
+export function getPoolStart(techSlug, propertyId) {
+  // filled in by propertyCompletion/serviceLog cache in supabaseStore; return null if not loaded yet
+  const row = getServiceLogRow(techSlug, propertyId);
+  const t = row?.pool_hose_started_at ? Date.parse(row.pool_hose_started_at) : null;
+  return Number.isFinite(t) ? t : null;
 }
 
-export function hoseSpaKey(propertySlug) {
-  return `hose_spa_${propertySlug}`;
+/** @returns {number|null} ms timestamp */
+export function getSpaStart(techSlug, propertyId) {
+  const row = getServiceLogRow(techSlug, propertyId);
+  const t = row?.spa_hose_started_at ? Date.parse(row.spa_hose_started_at) : null;
+  return Number.isFinite(t) ? t : null;
 }
 
-export function getPoolStart(propertySlug) {
-  try {
-    const v = localStorage.getItem(hosePoolKey(propertySlug));
-    if (v == null) return null;
-    const n = parseInt(v, 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
+export function setPoolStart(techSlug, propertyId, timestampMs) {
+  const iso = new Date(timestampMs).toISOString();
+  void patchServiceLog(techSlug, propertyId, { pool_hose_started_at: iso });
 }
 
-export function getSpaStart(propertySlug) {
-  try {
-    const v = localStorage.getItem(hoseSpaKey(propertySlug));
-    if (v == null) return null;
-    const n = parseInt(v, 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
+export function setSpaStart(techSlug, propertyId, timestampMs) {
+  const iso = new Date(timestampMs).toISOString();
+  void patchServiceLog(techSlug, propertyId, { spa_hose_started_at: iso });
 }
 
-export function setPoolStart(propertySlug, timestamp) {
-  try {
-    localStorage.setItem(hosePoolKey(propertySlug), String(timestamp));
-  } catch {
-    /* quota / private mode */
-  }
+export function clearPool(techSlug, propertyId) {
+  void patchServiceLog(techSlug, propertyId, { pool_hose_started_at: null });
 }
 
-export function setSpaStart(propertySlug, timestamp) {
-  try {
-    localStorage.setItem(hoseSpaKey(propertySlug), String(timestamp));
-  } catch {
-    /* quota / private mode */
-  }
-}
-
-export function clearPool(propertySlug) {
-  try {
-    localStorage.removeItem(hosePoolKey(propertySlug));
-  } catch {
-    /* ignore */
-  }
-}
-
-export function clearSpa(propertySlug) {
-  try {
-    localStorage.removeItem(hoseSpaKey(propertySlug));
-  } catch {
-    /* ignore */
-  }
+export function clearSpa(techSlug, propertyId) {
+  void patchServiceLog(techSlug, propertyId, { spa_hose_started_at: null });
 }
 
 /** Elapsed whole seconds from start timestamp to now */

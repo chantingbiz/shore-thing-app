@@ -11,14 +11,27 @@ import {
 import { getTechnicianRouteDaySummary } from "../../utils/technicianPropertyStatus.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
+import { primeTechnicianToday } from "../../lib/supabaseStore.js";
+import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 
 export default function AdminActivityPage() {
+  useSupabaseSyncTick();
   const [, setPoll] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     const id = window.setInterval(() => setPoll((n) => n + 1), 4000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    for (const t of TECHNICIANS) {
+      const routeProps = getTechnicianRouteProperties(t.slug);
+      primeTechnicianToday(
+        t.slug,
+        routeProps.map((p) => p.id).filter(Boolean)
+      );
+    }
   }, []);
 
   const handleRefresh = useCallback(() => {

@@ -11,8 +11,8 @@ import { isPropertyCompletedToday } from "./propertyCompletion.js";
  */
 export function getTechnicianPropertySortTier(techSlug, propertySlug, dayKey) {
   if (isPropertyCompletedToday(techSlug, propertySlug, dayKey)) return 3;
-  const active =
-    getPoolStart(propertySlug) != null || getSpaStart(propertySlug) != null;
+  // Live hose state is tracked per service log (requires propertyId); if unknown, treat as not active.
+  const active = false;
   if (active) return 0;
   const last = getLastInteractionTimestamp(techSlug, propertySlug, dayKey);
   if (last != null) return 1;

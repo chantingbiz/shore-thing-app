@@ -6,13 +6,15 @@ import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import ReadingsForm from "../../components/ReadingsForm.jsx";
 import { logTechnicianActivity } from "../../utils/activityLog.js";
 import { getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
-import { saveWorkSnapshot } from "../../utils/technicianWorkSnapshot.js";
+import { patchServiceLog, primeTechnicianToday } from "../../lib/supabaseStore.js";
+import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./StephenPropertyDetailPage.module.css";
 
 export default function StephenPropertyDetailPage() {
   const { propertySlug } = useParams();
   const property = getStephenPropertyBySlug(propertySlug);
+  useSupabaseSyncTick();
 
   const readingsSigRef = useRef(null);
   const chemSigRef = useRef(null);
@@ -28,16 +30,27 @@ export default function StephenPropertyDetailPage() {
     return () => window.clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    if (!property) return;
+    primeTechnicianToday("stephen", [property.id]);
+  }, [property]);
+
   const handleWorkStateChange = useCallback((state) => {
     const prop = getStephenPropertyBySlug(propertySlug);
     if (!prop) return;
 
-    const poolHose = getPoolStart(prop.slug) != null;
-    const spaHose = getSpaStart(prop.slug) != null;
-    saveWorkSnapshot("stephen", prop.slug, {
-      ...state,
-      poolHoseActive: poolHose,
-      spaHoseActive: spaHose,
+    const poolHose = getPoolStart("stephen", prop.id) != null;
+    const spaHose = getSpaStart("stephen", prop.id) != null;
+    void patchServiceLog("stephen", prop.id, {
+      readings_json: {
+        pool: state.pool,
+        spa: state.spa,
+        poolChem: state.poolChem,
+        spaChem: state.spaChem,
+        poolHoseActive: poolHose,
+        spaHoseActive: spaHose,
+        savedAt: Date.now(),
+      },
     });
 
     const r = JSON.stringify({ pool: state.pool, spa: state.spa });
@@ -83,11 +96,12 @@ export default function StephenPropertyDetailPage() {
     >
       <div className={styles.body}>
         <RouteParamBadges
-          propertySlug={property.slug}
+          propertyId={property.id}
           className={styles.routeParams}
         />
         <PropertyHoseControls
           propertySlug={property.slug}
+          propertyId={property.id}
           technicianSlug="stephen"
           propertyName={property.name}
           enableActivityLog
