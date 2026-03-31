@@ -4,6 +4,7 @@ import { isPropertyCompletedToday } from "./propertyCompletion.js";
 import {
   ensureActivityForToday,
   getActivityEvents,
+  getServiceLogRow,
   primePropertiesBySlug,
   resolveDbPropertyId,
 } from "../lib/supabaseStore.js";
@@ -90,13 +91,20 @@ export function getTechnicianRouteDaySummaryByPropertyId(
   for (const p of routeProperties) {
     const slug = p.slug;
     const id = resolveDbPropertyId(slug);
-    if (isPropertyCompletedToday(techSlug, slug, dayKey)) {
+    if (!id) continue;
+
+    const row = getServiceLogRow(techSlug, id);
+    const completed = !!row?.completed || isPropertyCompletedToday(techSlug, slug, dayKey);
+    const hasActivity = events.some((e) => e.property_id === id);
+    const hasActiveHose = row?.pool_hose_started_at != null || row?.spa_hose_started_at != null;
+
+    if (completed) {
       completedCount++;
       continue;
     }
-    if (!id) continue;
-    const hasActivity = events.some((e) => e.property_id === id);
-    if (hasActivity) inProgressCount++;
+    if (hasActivity || hasActiveHose) {
+      inProgressCount++;
+    }
   }
 
   return { total, completedCount, inProgressCount };

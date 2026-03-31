@@ -19,17 +19,19 @@ export default function AdminHomePage() {
     try {
       setResetBusy(true);
       setResetStatus(null);
-      const { data, error } = await supabase.rpc("reset_shore_thing_data");
+      console.log("reset starting");
+      // Only the DB RPC clears app tables — no client-side .delete() on service_logs / activity_logs / route_settings.
+      const { error } = await supabase.rpc("reset_shore_thing_data");
       if (error) {
-        console.error("Supabase write failed", error);
-        setResetStatus({ kind: "error", message: "Reset failed. See console." });
-        return;
+        console.error("reset failed", error);
+        throw error;
+      } else {
+        console.log("reset ok");
       }
-      console.log("Supabase write ok", data);
       resetSupabaseCaches();
       setResetStatus({ kind: "ok", message: "App data reset successfully." });
     } catch (error) {
-      console.error("Supabase write failed", error);
+      console.error("reset failed", error);
       setResetStatus({ kind: "error", message: "Reset failed. See console." });
     } finally {
       setResetBusy(false);
