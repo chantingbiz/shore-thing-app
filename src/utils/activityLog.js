@@ -1,8 +1,10 @@
-import { getStephenPropertyById, getStephenPropertyBySlug } from "../data/stephenProperties.js";
+import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
 import {
   ensureActivityForToday,
   getActivityEvents,
   insertActivity,
+  primePropertiesBySlug,
+  resolveDbPropertyId,
 } from "../lib/supabaseStore.js";
 import { getLocalDayKey } from "./localDay.js";
 import { isPropertyCompletedToday } from "./propertyCompletion.js";
@@ -20,8 +22,16 @@ export function logTechnicianActivity(techSlug, payload) {
   if (!techSlug || !payload?.propertySlug) return;
   const prop =
     techSlug === "stephen" ? getStephenPropertyBySlug(payload.propertySlug) : null;
-  if (!prop?.id) return;
-  void insertActivity(techSlug, prop.id, payload.type, payload.label || payload.type);
+  if (!prop?.slug) return;
+  primePropertiesBySlug([prop.slug]);
+  const resolved = resolveDbPropertyId(prop.slug);
+  console.log("Supabase write preflight", {
+    property_slug: prop.slug,
+    property_id: resolved,
+    event_type: payload.type,
+  });
+  if (!resolved) return;
+  void insertActivity(techSlug, resolved, payload.type, payload.label || payload.type);
 }
 
 export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {
@@ -30,16 +40,13 @@ export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {
   const raw = getActivityEvents(techSlug);
   if (!raw.length) return null;
   const mapped = raw
-    .map((r) => {
-      const prop = techSlug === "stephen" ? getStephenPropertyById(r.property_id) : null;
-      return {
-        t: Date.parse(r.created_at),
-        propertySlug: prop?.slug ?? String(r.property_id),
-        propertyName: prop?.name ?? "Property",
-        type: r.event_type,
-        label: r.event_label ?? r.event_type,
-      };
-    })
+    .map((r) => ({
+      t: Date.parse(r.created_at),
+      propertySlug: String(r.property_id),
+      propertyName: "Property",
+      type: r.event_type,
+      label: r.event_label ?? r.event_type,
+    }))
     .filter((e) => Number.isFinite(e.t));
   if (!mapped.length) return null;
   const firstAt = mapped.reduce((min, e) => (min == null ? e.t : Math.min(min, e.t)), null);

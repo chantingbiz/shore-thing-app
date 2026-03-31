@@ -52,7 +52,7 @@ function formatChem(val, suffix) {
 export default function AdminReadOnlyWorkView({
   serviceLog,
   techSlug,
-  propertyId,
+  propertySlug,
 }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -86,8 +86,8 @@ export default function AdminReadOnlyWorkView({
     ta: serviceLog?.spa_ta_added,
   };
 
-  const poolTs = getPoolStart(techSlug, propertyId);
-  const spaTs = getSpaStart(techSlug, propertyId);
+  const poolTs = getPoolStart(techSlug, propertySlug);
+  const spaTs = getSpaStart(techSlug, propertySlug);
   const poolRun =
     poolTs != null
       ? formatHoseElapsed(Math.floor((now - poolTs) / 1000))

@@ -1,4 +1,9 @@
-import { getServiceLogRow, patchServiceLog } from "../lib/supabaseStore.js";
+import {
+  getServiceLogRow,
+  patchServiceLog,
+  primePropertiesBySlug,
+  resolveDbPropertyId,
+} from "../lib/supabaseStore.js";
 
 /**
  * Supabase-backed hose state.
@@ -8,34 +13,72 @@ import { getServiceLogRow, patchServiceLog } from "../lib/supabaseStore.js";
 /** @returns {number|null} ms timestamp */
 export function getPoolStart(techSlug, propertyId) {
   // filled in by propertyCompletion/serviceLog cache in supabaseStore; return null if not loaded yet
-  const row = getServiceLogRow(techSlug, propertyId);
+  const id = resolveDbPropertyId(propertyId) ?? propertyId;
+  const row = getServiceLogRow(techSlug, id);
   const t = row?.pool_hose_started_at ? Date.parse(row.pool_hose_started_at) : null;
   return Number.isFinite(t) ? t : null;
 }
 
 /** @returns {number|null} ms timestamp */
 export function getSpaStart(techSlug, propertyId) {
-  const row = getServiceLogRow(techSlug, propertyId);
+  const id = resolveDbPropertyId(propertyId) ?? propertyId;
+  const row = getServiceLogRow(techSlug, id);
   const t = row?.spa_hose_started_at ? Date.parse(row.spa_hose_started_at) : null;
   return Number.isFinite(t) ? t : null;
 }
 
 export function setPoolStart(techSlug, propertyId, timestampMs) {
+  primePropertiesBySlug([propertyId]);
+  const resolved = resolveDbPropertyId(propertyId);
+  console.log("Supabase write preflight", {
+    property_slug: propertyId,
+    property_id: resolved,
+    service_date: new Date().toISOString().split("T")[0],
+    onConflict: "property_id,service_date",
+  });
+  if (!resolved) return;
   const iso = new Date(timestampMs).toISOString();
-  void patchServiceLog(techSlug, propertyId, { pool_hose_started_at: iso });
+  void patchServiceLog(techSlug, resolved, { pool_hose_started_at: iso });
 }
 
 export function setSpaStart(techSlug, propertyId, timestampMs) {
+  primePropertiesBySlug([propertyId]);
+  const resolved = resolveDbPropertyId(propertyId);
+  console.log("Supabase write preflight", {
+    property_slug: propertyId,
+    property_id: resolved,
+    service_date: new Date().toISOString().split("T")[0],
+    onConflict: "property_id,service_date",
+  });
+  if (!resolved) return;
   const iso = new Date(timestampMs).toISOString();
-  void patchServiceLog(techSlug, propertyId, { spa_hose_started_at: iso });
+  void patchServiceLog(techSlug, resolved, { spa_hose_started_at: iso });
 }
 
 export function clearPool(techSlug, propertyId) {
-  void patchServiceLog(techSlug, propertyId, { pool_hose_started_at: null });
+  primePropertiesBySlug([propertyId]);
+  const resolved = resolveDbPropertyId(propertyId);
+  console.log("Supabase write preflight", {
+    property_slug: propertyId,
+    property_id: resolved,
+    service_date: new Date().toISOString().split("T")[0],
+    onConflict: "property_id,service_date",
+  });
+  if (!resolved) return;
+  void patchServiceLog(techSlug, resolved, { pool_hose_started_at: null });
 }
 
 export function clearSpa(techSlug, propertyId) {
-  void patchServiceLog(techSlug, propertyId, { spa_hose_started_at: null });
+  primePropertiesBySlug([propertyId]);
+  const resolved = resolveDbPropertyId(propertyId);
+  console.log("Supabase write preflight", {
+    property_slug: propertyId,
+    property_id: resolved,
+    service_date: new Date().toISOString().split("T")[0],
+    onConflict: "property_id,service_date",
+  });
+  if (!resolved) return;
+  void patchServiceLog(techSlug, resolved, { spa_hose_started_at: null });
 }
 
 /** Elapsed whole seconds from start timestamp to now */

@@ -3,7 +3,12 @@ import { getStephenPropertyBySlug } from "../../data/stephenProperties.js";
 import { formatActivityTime } from "../../utils/activityLog.js";
 import { getPropertyCompletedAt } from "../../utils/propertyCompletion.js";
 import { getAdminPropertyDayStatus } from "../../utils/technicianPropertyStatus.js";
-import { getServiceLogRow, primeTechnicianToday } from "../../lib/supabaseStore.js";
+import {
+  getServiceLogRow,
+  primePropertiesBySlug,
+  primeTechnicianToday,
+  resolveDbPropertyId,
+} from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import AdminReadOnlyWorkView from "./AdminReadOnlyWorkView.jsx";
@@ -22,8 +27,10 @@ export default function AdminActivityPropertyPage() {
     return <Navigate to={`/administrator/activity/${techSlug}`} replace />;
   }
 
-  primeTechnicianToday("stephen", [property.id]);
-  const serviceLog = getServiceLogRow("stephen", property.id) ?? null;
+  primePropertiesBySlug([property.slug]);
+  primeTechnicianToday("stephen", []);
+  const resolved = resolveDbPropertyId(property.slug);
+  const serviceLog = resolved ? getServiceLogRow("stephen", resolved) : null;
   const status = getAdminPropertyDayStatus("stephen", property.slug);
   const completedAt = getPropertyCompletedAt("stephen", property.slug);
 
@@ -52,7 +59,7 @@ export default function AdminActivityPropertyPage() {
       <AdminReadOnlyWorkView
         serviceLog={serviceLog}
         techSlug={techSlug}
-        propertyId={property.id}
+        propertySlug={property.slug}
       />
     </SubpageTemplate>
   );

@@ -1,5 +1,10 @@
 import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
-import { getServiceLogRow, patchServiceLog } from "../lib/supabaseStore.js";
+import {
+  getServiceLogRow,
+  patchServiceLog,
+  primePropertiesBySlug,
+  resolveDbPropertyId,
+} from "../lib/supabaseStore.js";
 import { getLocalDayKey } from "./localDay.js";
 
 /**
@@ -18,9 +23,18 @@ export function setPropertyCompletedForDay(
   if (!techSlug || !propertySlug) return;
   const prop =
     techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  if (!prop?.id) return;
+  if (!prop?.slug) return;
+  primePropertiesBySlug([prop.slug]);
+  const resolved = resolveDbPropertyId(prop.slug);
+  console.log("Supabase write preflight", {
+    property_slug: prop.slug,
+    property_id: resolved,
+    service_date: new Date().toISOString().split("T")[0],
+    onConflict: "property_id,service_date",
+  });
+  if (!resolved) return;
   const nowIso = new Date().toISOString();
-  void patchServiceLog(techSlug, prop.id, {
+  void patchServiceLog(techSlug, resolved, {
     completed: !!completed,
     completed_at: completed ? nowIso : null,
   });
@@ -35,8 +49,10 @@ export function isPropertyCompletedToday(
   if (!techSlug || !propertySlug) return false;
   const prop =
     techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  if (!prop?.id) return false;
-  const row = getServiceLogRow(techSlug, prop.id);
+  if (!prop?.slug) return false;
+  const id = resolveDbPropertyId(prop.slug);
+  if (!id) return false;
+  const row = getServiceLogRow(techSlug, id);
   return !!row?.completed;
 }
 
@@ -49,8 +65,10 @@ export function getPropertyCompletedAt(
   if (!techSlug || !propertySlug) return null;
   const prop =
     techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  if (!prop?.id) return null;
-  const row = getServiceLogRow(techSlug, prop.id);
+  if (!prop?.slug) return null;
+  const id = resolveDbPropertyId(prop.slug);
+  if (!id) return null;
+  const row = getServiceLogRow(techSlug, id);
   const t = row?.completed_at ? Date.parse(row.completed_at) : null;
   return Number.isFinite(t) ? t : null;
 }

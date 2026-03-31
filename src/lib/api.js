@@ -58,10 +58,17 @@ export async function upsertServiceLog(propertyId, techSlug, data) {
     ...data,
   };
 
+  const onConflict = "property_id,service_date";
+  console.log("Supabase write about to run", {
+    property_id: payload.property_id,
+    service_date: payload.service_date,
+    onConflict,
+  });
+
   const { data: row, error } = await supabase
     .from("service_logs")
     .upsert(payload, {
-      onConflict: "property_id,technician_slug,service_date",
+      onConflict,
     })
     .select()
     .maybeSingle();
@@ -88,6 +95,11 @@ export async function getServiceLogsForToday(techSlug) {
 }
 
 export async function logActivity(techSlug, propertyId, eventType, eventLabel) {
+  console.log("Supabase write about to run", {
+    property_id: propertyId,
+    event_type: eventType,
+    event_label: eventLabel,
+  });
   const { data, error } = await supabase.from("activity_logs").insert({
     technician_slug: techSlug,
     property_id: propertyId,
@@ -121,6 +133,10 @@ export async function updateRouteSettings(propertyId, settings) {
     ...settings,
     updated_at: new Date().toISOString(),
   };
+  console.log("Supabase write about to run", {
+    property_id: payload.property_id,
+    onConflict: "property_id",
+  });
   const { data, error } = await supabase
     .from("route_settings")
     .upsert(payload, { onConflict: "property_id" })
@@ -140,6 +156,21 @@ export async function getRouteSettings(propertyIds) {
     .from("route_settings")
     .select("property_id,guest_check,pool_heat,updated_at")
     .in("property_id", propertyIds);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getPropertiesBySlugs(propertySlugs) {
+  const slugs = (propertySlugs ?? [])
+    .map((s) => (typeof s === "string" ? s.toLowerCase() : null))
+    .filter(Boolean);
+  if (!slugs.length) return [];
+
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id,property_slug")
+    .in("property_slug", slugs);
+
   if (error) throw error;
   return data ?? [];
 }

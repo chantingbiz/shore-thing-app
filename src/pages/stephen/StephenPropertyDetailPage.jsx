@@ -6,7 +6,12 @@ import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import ReadingsForm from "../../components/ReadingsForm.jsx";
 import { logTechnicianActivity } from "../../utils/activityLog.js";
 import { getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
-import { patchServiceLog, primeTechnicianToday } from "../../lib/supabaseStore.js";
+import {
+  patchServiceLog,
+  primePropertiesBySlug,
+  primeTechnicianToday,
+  resolveDbPropertyId,
+} from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import { mapWorkStateToServiceLogPatch } from "../../lib/api.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
@@ -33,16 +38,29 @@ export default function StephenPropertyDetailPage() {
 
   useEffect(() => {
     if (!property) return;
-    primeTechnicianToday("stephen", [property.id]);
+    primePropertiesBySlug([property.slug]);
+    primeTechnicianToday("stephen", []);
   }, [property]);
 
   const handleWorkStateChange = useCallback((state) => {
     const prop = getStephenPropertyBySlug(propertySlug);
     if (!prop) return;
 
-    const poolHose = getPoolStart("stephen", prop.id) != null;
-    const spaHose = getSpaStart("stephen", prop.id) != null;
-    void patchServiceLog("stephen", prop.id, {
+    primePropertiesBySlug([prop.slug]);
+    const resolved = resolveDbPropertyId(prop.slug);
+    console.log("Supabase write preflight", {
+      property_slug: prop.slug,
+      property_id: resolved,
+      service_date: new Date().toISOString().split("T")[0],
+      onConflict: "property_id,service_date",
+    });
+    if (!resolved) return;
+
+    const poolHose = getPoolStart("stephen", prop.slug) != null;
+    const spaHose = getSpaStart("stephen", prop.slug) != null;
+    void poolHose;
+    void spaHose;
+    void patchServiceLog("stephen", resolved, {
       ...mapWorkStateToServiceLogPatch(state),
     });
 
@@ -89,12 +107,11 @@ export default function StephenPropertyDetailPage() {
     >
       <div className={styles.body}>
         <RouteParamBadges
-          propertyId={property.id}
+          propertySlug={property.slug}
           className={styles.routeParams}
         />
         <PropertyHoseControls
           propertySlug={property.slug}
-          propertyId={property.id}
           technicianSlug="stephen"
           propertyName={property.name}
           enableActivityLog

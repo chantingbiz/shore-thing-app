@@ -16,7 +16,6 @@ import styles from "./PropertyHoseControls.module.css";
 
 export default function PropertyHoseControls({
   propertySlug,
-  propertyId,
   technicianSlug,
   propertyName,
   enableActivityLog = false,
@@ -28,13 +27,13 @@ export default function PropertyHoseControls({
   const [spaActive, setSpaActive] = useState(false);
 
   useEffect(() => {
-    const poolTs = getPoolStart(technicianSlug, propertyId);
-    const spaTs = getSpaStart(technicianSlug, propertyId);
+    const poolTs = getPoolStart(technicianSlug, propertySlug);
+    const spaTs = getSpaStart(technicianSlug, propertySlug);
     poolStartRef.current = poolTs;
     spaStartRef.current = spaTs;
     setPoolActive(poolTs != null);
     setSpaActive(spaTs != null);
-  }, [propertySlug, propertyId, technicianSlug]);
+  }, [propertySlug, technicianSlug]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -69,13 +68,13 @@ export default function PropertyHoseControls({
   const togglePool = () => {
     if (poolActive) {
       logHose("pool_hose_stopped", "Pool hose removed");
-      clearPool(technicianSlug, propertyId);
+      clearPool(technicianSlug, propertySlug);
       poolStartRef.current = null;
       setPoolActive(false);
     } else {
       logHose("pool_hose_started", "Pool hose started");
       const ts = Date.now();
-      setPoolStart(technicianSlug, propertyId, ts);
+      setPoolStart(technicianSlug, propertySlug, ts);
       poolStartRef.current = ts;
       setPoolActive(true);
     }
@@ -86,13 +85,13 @@ export default function PropertyHoseControls({
   const toggleSpa = () => {
     if (spaActive) {
       logHose("spa_hose_stopped", "Spa hose removed");
-      clearSpa(technicianSlug, propertyId);
+      clearSpa(technicianSlug, propertySlug);
       spaStartRef.current = null;
       setSpaActive(false);
     } else {
       logHose("spa_hose_started", "Spa hose started");
       const ts = Date.now();
-      setSpaStart(technicianSlug, propertyId, ts);
+      setSpaStart(technicianSlug, propertySlug, ts);
       spaStartRef.current = ts;
       setSpaActive(true);
     }

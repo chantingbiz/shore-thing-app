@@ -1,5 +1,6 @@
 import {
   getActivityLogsForToday,
+  getPropertiesBySlugs,
   getRouteSettings,
   getServiceLogsForToday,
   logActivity,
@@ -30,6 +31,8 @@ const serviceLogsByTech = new Map();
 const activityByTech = new Map();
 /** @type {{ loadedAt: number, byPropertyId: Map<string, any> }} */
 const routeSettingsCache = { loadedAt: 0, byPropertyId: new Map() };
+/** @type {{ loadedAt: number, bySlug: Map<string, { id: string, property_slug: string }> }} */
+const propertiesCache = { loadedAt: 0, bySlug: new Map() };
 
 /** Basic protection against spamming fetch on rapid changes */
 const inflight = new Map();
@@ -89,6 +92,31 @@ export function primeTechnicianToday(techSlug, routePropertyIds = []) {
   void ensureServiceLogsForToday(techSlug);
   void ensureActivityForToday(techSlug);
   if (routePropertyIds.length) void ensureRouteSettings(routePropertyIds);
+}
+
+export function primePropertiesBySlug(propertySlugs = []) {
+  void ensurePropertiesBySlug(propertySlugs);
+}
+
+export async function ensurePropertiesBySlug(propertySlugs) {
+  const slugs = (propertySlugs ?? []).filter(Boolean);
+  if (!slugs.length) return;
+  const key = `properties:${slugs.slice().sort().join(",")}`;
+  return deduped(key, async () => {
+    const rows = await getPropertiesBySlugs(slugs);
+    for (const r of rows) {
+      if (r?.property_slug && r?.id) {
+        propertiesCache.bySlug.set(String(r.property_slug).toLowerCase(), r);
+      }
+    }
+    propertiesCache.loadedAt = Date.now();
+    emitter.emit();
+  });
+}
+
+export function resolveDbPropertyId(propertySlug) {
+  if (!propertySlug) return null;
+  return propertiesCache.bySlug.get(String(propertySlug).toLowerCase())?.id ?? null;
 }
 
 export async function ensureServiceLogsForToday(techSlug) {

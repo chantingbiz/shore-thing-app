@@ -15,7 +15,7 @@ import {
 import { sortPropertiesForTechnicianList } from "../../utils/technicianPropertyOrder.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
-import { primeTechnicianToday } from "../../lib/supabaseStore.js";
+import { primePropertiesBySlug, primeTechnicianToday } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./StephenPropertiesPage.module.css";
@@ -33,10 +33,8 @@ export default function StephenPropertiesPage() {
   }, []);
 
   useEffect(() => {
-    primeTechnicianToday(
-      TECH_SLUG,
-      STEPHEN_PROPERTIES.map((p) => p.id)
-    );
+    primePropertiesBySlug(STEPHEN_PROPERTIES.map((p) => p.slug));
+    primeTechnicianToday(TECH_SLUG, []);
   }, []);
 
   const sorted = useMemo(() => {
@@ -79,8 +77,8 @@ export default function StephenPropertiesPage() {
       </div>
       <nav className={styles.list} aria-label="Stephen properties">
         {sorted.map((p) => {
-          const poolTs = getPoolStart(TECH_SLUG, p.id);
-          const spaTs = getSpaStart(TECH_SLUG, p.id);
+          const poolTs = getPoolStart(TECH_SLUG, p.slug);
+          const spaTs = getSpaStart(TECH_SLUG, p.slug);
           const poolSec =
             poolTs != null ? elapsedSecondsSince(poolTs, now) : null;
           const spaSec =
@@ -126,7 +124,7 @@ export default function StephenPropertiesPage() {
                   </div>
                 </div>
                 <RouteParamBadges
-                  propertyId={p.id}
+                  propertySlug={p.slug}
                   className={styles.routeBadges}
                 />
                 <span className={styles.cardAddress}>{p.address}</span>
