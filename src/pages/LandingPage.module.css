@@ -1,0 +1,60 @@
+.main {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: min(27rem, calc(100vw - 1.75rem));
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.125rem;
+}
+
+.logoWrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.logo {
+  width: 100%;
+  height: auto;
+  max-height: min(52vh, 15.5rem);
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.12));
+}
+
+.nav {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.0625rem;
+}
+
+@media (min-width: 480px) {
+  .main {
+    max-width: min(31rem, calc(100vw - 2rem));
+    gap: 1.25rem;
+  }
+
+  .logo {
+    max-height: min(54vh, 18.5rem);
+  }
+
+  .nav {
+    gap: 1.1875rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .main {
+    max-width: min(36rem, 92vw);
+  }
+
+  .logo {
+    max-height: min(56vh, 21rem);
+  }
+}

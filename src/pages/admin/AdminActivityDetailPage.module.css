@@ -1,0 +1,54 @@
+.summary {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.summary strong {
+  font-weight: 800;
+}
+
+.sectionHeading {
+  margin: 1.25rem 0 0.65rem;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.eventList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.eventItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.eventTime {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.55);
+}
+
+.eventBody {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.55);
+  line-height: 1.35;
+}

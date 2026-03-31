@@ -1,0 +1,51 @@
+.wrap {
+  display: flex;
+  width: 100%;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.segment {
+  flex: 1;
+  min-height: 2.65rem;
+  padding: 0.45rem 0.5rem;
+  border: none;
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.segmentActive {
+  background: rgba(255, 255, 255, 0.42);
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.7);
+}
+
+.segmentInactive {
+  background: transparent;
+  color: rgba(0, 0, 0, 0.42);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.35);
+}
+
+.segmentInactive:hover {
+  color: rgba(0, 0, 0, 0.58);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (min-width: 400px) {
+  .segment {
+    font-size: 0.8125rem;
+    min-height: 2.75rem;
+  }
+}

@@ -1,0 +1,255 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  margin-inline: -0.15rem;
+}
+
+.section {
+  margin: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.headerRow {
+  display: grid;
+  grid-template-columns: minmax(4.75rem, 5.75rem) minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 0.35rem;
+  align-items: end;
+  padding-bottom: 0.15rem;
+}
+
+.headerSpacer {
+  min-height: 1em;
+}
+
+.colHeader {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(4.75rem, 5.75rem) minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 0.35rem;
+  align-items: center;
+}
+
+.rowLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.inputCell {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.setToLabel {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.65);
+  flex-shrink: 0;
+}
+
+.inputInCell {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 3.25rem;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.85rem;
+  padding: 0.55rem 0.5rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #000;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  text-shadow: none;
+  text-align: center;
+}
+
+.input::placeholder {
+  color: rgba(0, 0, 0, 0.38);
+  text-shadow: none;
+}
+
+.input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.subsectionTitle {
+  margin: 1.1rem 0 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.chemBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.chemRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 3rem;
+}
+
+.chemLabel {
+  flex: 0 0 auto;
+  min-width: 5.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.chemInputWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.chemInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.85rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #000;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  text-align: left;
+}
+
+.chemInput::placeholder {
+  color: rgba(0, 0, 0, 0.38);
+}
+
+.chemInput:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.chemSuffix {
+  flex-shrink: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+  padding-right: 0.15rem;
+}
+
+@media (min-width: 400px) {
+  .wrap {
+    margin-inline: 0;
+  }
+
+  .headerRow,
+  .row {
+    column-gap: 0.45rem;
+  }
+
+  .input {
+    padding: 0.6rem 0.65rem;
+    font-size: 1.0625rem;
+    min-height: 3rem;
+  }
+
+  .chemInput {
+    min-height: 3rem;
+    padding: 0.6rem 0.75rem;
+    font-size: 1.0625rem;
+  }
+
+  .chemLabel {
+    font-size: 0.875rem;
+    min-width: 6.25rem;
+  }
+}
+
+@media (min-width: 480px) {
+  .headerRow,
+  .row {
+    grid-template-columns: minmax(5.5rem, 6.5rem) minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 0.55rem;
+  }
+
+  .colHeader {
+    font-size: 0.8125rem;
+  }
+
+  .rowLabel {
+    font-size: 0.875rem;
+  }
+
+  .setToLabel {
+    font-size: 0.8125rem;
+  }
+
+  .subsectionTitle {
+    font-size: 1rem;
+  }
+}

@@ -1,0 +1,85 @@
+.glassBtn {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4.25rem;
+  padding: 1.125rem 1.5rem;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.07), 0 3px 10px rgba(0, 0, 0, 0.04);
+  color: rgba(255, 255, 255, 0.95);
+  font-family: system-ui, -apple-system, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+  font-weight: 500;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+/* Diagonal glossy streak (top-right), white only — reference “liquid glass” shine */
+.glassBtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    128deg,
+    transparent 0%,
+    transparent 42%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.08) 58%,
+    transparent 68%
+  );
+  opacity: 0.75;
+}
+
+.glassBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.045);
+}
+
+.glassBtn:active {
+  transform: scale(0.98);
+}
+
+.btnLabel {
+  position: relative;
+  z-index: 1;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 3px 10px rgba(0, 0, 0, 0.35);
+}
+
+.glassBtnFull {
+  width: 100%;
+}
+
+@media (min-width: 480px) {
+  .glassBtn {
+    min-height: 4.5rem;
+    font-size: 1.3125rem;
+    border-radius: 1.375rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glassBtn,
+  .glassBtn:active {
+    transition: none;
+    transform: none;
+  }
+}
