@@ -1,6 +1,7 @@
 import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
 import {
   getServiceLogRow,
+  insertActivity,
   patchServiceLog,
   primePropertiesBySlug,
   resolveDbPropertyId,
@@ -34,10 +35,22 @@ export function setPropertyCompletedForDay(
   });
   if (!resolved) return;
   const nowIso = new Date().toISOString();
-  void patchServiceLog(techSlug, resolved, {
+  const row = getServiceLogRow(techSlug, resolved);
+  const patch = {
     completed: !!completed,
     completed_at: completed ? nowIso : null,
-  });
+  };
+  if (completed) {
+    if (row?.pool_hose_started_at != null) {
+      patch.pool_hose_started_at = null;
+      void insertActivity(techSlug, resolved, "pool_hose_stopped", "Removed pool hose");
+    }
+    if (row?.spa_hose_started_at != null) {
+      patch.spa_hose_started_at = null;
+      void insertActivity(techSlug, resolved, "spa_hose_stopped", "Removed spa hose");
+    }
+  }
+  void patchServiceLog(techSlug, resolved, patch);
 }
 
 export function isPropertyCompletedToday(
