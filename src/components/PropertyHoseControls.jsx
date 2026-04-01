@@ -67,12 +67,12 @@ export default function PropertyHoseControls({
 
   const togglePool = () => {
     if (poolActive) {
-      logHose("pool_hose_stopped", "Pool hose removed");
+      logHose("pool_hose_stopped", "Removed pool hose");
       clearPool(technicianSlug, propertySlug);
       poolStartRef.current = null;
       setPoolActive(false);
     } else {
-      logHose("pool_hose_started", "Pool hose started");
+      logHose("pool_hose_started", "Dropped pool hose");
       const ts = Date.now();
       setPoolStart(technicianSlug, propertySlug, ts);
       poolStartRef.current = ts;
@@ -84,12 +84,12 @@ export default function PropertyHoseControls({
 
   const toggleSpa = () => {
     if (spaActive) {
-      logHose("spa_hose_stopped", "Spa hose removed");
+      logHose("spa_hose_stopped", "Removed spa hose");
       clearSpa(technicianSlug, propertySlug);
       spaStartRef.current = null;
       setSpaActive(false);
     } else {
-      logHose("spa_hose_started", "Spa hose started");
+      logHose("spa_hose_started", "Dropped spa hose");
       const ts = Date.now();
       setSpaStart(technicianSlug, propertySlug, ts);
       spaStartRef.current = ts;

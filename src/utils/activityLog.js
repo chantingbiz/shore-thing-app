@@ -115,12 +115,40 @@ function mapEventTypeToDisplayLabel(ev) {
       return "Removed spa hose";
     case "property_completed":
       return "Completed property";
+    case "pool_reading_updated":
+      return "Updated pool readings";
+    case "spa_reading_updated":
+      return "Updated spa readings";
     case "reading_updated":
       return "Updated readings";
+    case "pool_chemical_updated":
+      return "Adjusted pool chemicals";
+    case "spa_chemical_updated":
+      return "Adjusted spa chemicals";
     case "chemical_updated":
       return "Adjusted chemicals";
     default:
       return ev.label || ev.type;
+  }
+}
+
+/** Adjacent events merge only when same property, window, and this category key. */
+function activityGroupCategory(type) {
+  switch (type) {
+    case "pool_reading_updated":
+      return "pool_reading";
+    case "spa_reading_updated":
+      return "spa_reading";
+    case "reading_updated":
+      return "reading";
+    case "pool_chemical_updated":
+      return "pool_chemical";
+    case "spa_chemical_updated":
+      return "spa_chemical";
+    case "chemical_updated":
+      return "chemical";
+    default:
+      return null;
   }
 }
 
@@ -141,12 +169,7 @@ export function getGroupedDisplayEvents(
   let i = 0;
   while (i < sorted.length) {
     const ev = sorted[i];
-    const cat =
-      ev.type === "reading_updated"
-        ? "reading"
-        : ev.type === "chemical_updated"
-          ? "chemical"
-          : null;
+    const cat = activityGroupCategory(ev.type);
     if (cat == null) {
       out.push({
         t: ev.t,
@@ -163,23 +186,22 @@ export function getGroupedDisplayEvents(
     let j = i + 1;
     while (j < sorted.length) {
       const next = sorted[j];
-      const nextCat =
-        next.type === "reading_updated"
-          ? "reading"
-          : next.type === "chemical_updated"
-            ? "chemical"
-            : null;
+      const nextCat = activityGroupCategory(next.type);
       if (nextCat !== cat || next.propertySlug !== prop) break;
       if (next.t - startT > windowMs) break;
       j++;
     }
     const displayLabel =
-      cat === "reading" ? "Updated readings" : "Adjusted chemicals";
+      sorted[i].label || mapEventTypeToDisplayLabel(sorted[i]);
+    const isReadingGroup =
+      cat === "pool_reading" ||
+      cat === "spa_reading" ||
+      cat === "reading";
     out.push({
       t: sorted[i].t,
       propertySlug: prop,
       propertyName: sorted[i].propertyName,
-      type: cat === "reading" ? "reading_group" : "chemical_group",
+      type: isReadingGroup ? "reading_group" : "chemical_group",
       displayLabel,
     });
     i = j;

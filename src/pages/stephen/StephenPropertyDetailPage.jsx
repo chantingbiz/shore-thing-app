@@ -23,13 +23,17 @@ export default function StephenPropertyDetailPage() {
   const property = getStephenPropertyBySlug(propertySlug);
   useSupabaseSyncTick();
 
-  const readingsSigRef = useRef(null);
-  const chemSigRef = useRef(null);
+  const readingsPoolSigRef = useRef(null);
+  const readingsSpaSigRef = useRef(null);
+  const chemPoolSigRef = useRef(null);
+  const chemSpaSigRef = useRef(null);
   const [, setRoutePoll] = useState(0);
 
   useEffect(() => {
-    readingsSigRef.current = null;
-    chemSigRef.current = null;
+    readingsPoolSigRef.current = null;
+    readingsSpaSigRef.current = null;
+    chemPoolSigRef.current = null;
+    chemSpaSigRef.current = null;
   }, [propertySlug]);
 
   useEffect(() => {
@@ -65,32 +69,57 @@ export default function StephenPropertyDetailPage() {
       ...mapWorkStateToServiceLogPatch(state),
     });
 
-    const r = JSON.stringify({ pool: state.pool, spa: state.spa });
-    if (readingsSigRef.current === null) {
-      readingsSigRef.current = r;
-    } else if (r !== readingsSigRef.current) {
-      readingsSigRef.current = r;
+    const poolR = JSON.stringify(state.pool);
+    const spaR = JSON.stringify(state.spa);
+
+    if (readingsPoolSigRef.current === null) {
+      readingsPoolSigRef.current = poolR;
+    } else if (poolR !== readingsPoolSigRef.current) {
+      readingsPoolSigRef.current = poolR;
       logTechnicianActivity("stephen", {
         propertySlug: prop.slug,
         propertyName: prop.name,
-        type: "reading_updated",
-        label: "Updated readings",
+        type: "pool_reading_updated",
+        label: "Updated pool readings",
       });
     }
 
-    const c = JSON.stringify({
-      poolChem: state.poolChem,
-      spaChem: state.spaChem,
-    });
-    if (chemSigRef.current === null) {
-      chemSigRef.current = c;
-    } else if (c !== chemSigRef.current) {
-      chemSigRef.current = c;
+    if (readingsSpaSigRef.current === null) {
+      readingsSpaSigRef.current = spaR;
+    } else if (spaR !== readingsSpaSigRef.current) {
+      readingsSpaSigRef.current = spaR;
       logTechnicianActivity("stephen", {
         propertySlug: prop.slug,
         propertyName: prop.name,
-        type: "chemical_updated",
-        label: "Adjusted chemicals",
+        type: "spa_reading_updated",
+        label: "Updated spa readings",
+      });
+    }
+
+    const poolC = JSON.stringify(state.poolChem);
+    const spaC = JSON.stringify(state.spaChem);
+
+    if (chemPoolSigRef.current === null) {
+      chemPoolSigRef.current = poolC;
+    } else if (poolC !== chemPoolSigRef.current) {
+      chemPoolSigRef.current = poolC;
+      logTechnicianActivity("stephen", {
+        propertySlug: prop.slug,
+        propertyName: prop.name,
+        type: "pool_chemical_updated",
+        label: "Adjusted pool chemicals",
+      });
+    }
+
+    if (chemSpaSigRef.current === null) {
+      chemSpaSigRef.current = spaC;
+    } else if (spaC !== chemSpaSigRef.current) {
+      chemSpaSigRef.current = spaC;
+      logTechnicianActivity("stephen", {
+        propertySlug: prop.slug,
+        propertyName: prop.name,
+        type: "spa_chemical_updated",
+        label: "Adjusted spa chemicals",
       });
     }
   }, [propertySlug]);
