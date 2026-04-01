@@ -56,7 +56,8 @@ export function mapReadingsWorkStateToServiceLogPatch(state) {
     pool_ph_after: pool.ph?.after ?? "",
     pool_ta_before: pool.ta?.before ?? "",
     pool_ta_after: pool.ta?.after ?? "",
-    pool_temp_set: pool.poolTemp?.before ?? "",
+    pool_temp_before: pool.poolTemp?.before ?? "",
+    pool_temp_set: pool.poolTemp?.after ?? "",
 
     spa_tb_before: spa.tb?.before ?? "",
     spa_tb_after: spa.tb?.after ?? "",
@@ -66,6 +67,7 @@ export function mapReadingsWorkStateToServiceLogPatch(state) {
     spa_ph_after: spa.ph?.after ?? "",
     spa_ta_before: spa.ta?.before ?? "",
     spa_ta_after: spa.ta?.after ?? "",
+    spa_temp_before: spa.spaTemp?.before ?? "",
     spa_temp: spa.spaTemp?.after ?? "",
   };
 }
@@ -95,14 +97,20 @@ export function workStateFromServiceLogRow(row) {
       fc: { before: str(row.pool_fc_before), after: str(row.pool_fc_after) },
       ph: { before: str(row.pool_ph_before), after: str(row.pool_ph_after) },
       ta: { before: str(row.pool_ta_before), after: str(row.pool_ta_after) },
-      poolTemp: { before: str(row.pool_temp_set), after: "" },
+      poolTemp: {
+        before: str(row.pool_temp_before),
+        after: str(row.pool_temp_set),
+      },
     },
     spa: {
       tb: { before: str(row.spa_tb_before), after: str(row.spa_tb_after) },
       fc: { before: str(row.spa_fc_before), after: str(row.spa_fc_after) },
       ph: { before: str(row.spa_ph_before), after: str(row.spa_ph_after) },
       ta: { before: str(row.spa_ta_before), after: str(row.spa_ta_after) },
-      spaTemp: { before: "", after: str(row.spa_temp) },
+      spaTemp: {
+        before: str(row.spa_temp_before),
+        after: str(row.spa_temp),
+      },
     },
     poolChem: {
       pucks: str(row.pool_pucks),
@@ -171,7 +179,7 @@ export async function getServiceLogsForToday(techSlug) {
   const { data, error } = await supabase
     .from("service_logs")
     .select(
-      "property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added"
+      "property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added"
     )
     .eq("technician_slug", techSlug)
     .eq("service_date", todayISO());

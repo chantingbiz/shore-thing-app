@@ -66,14 +66,20 @@ export default function AdminReadOnlyWorkView({
     fc: { before: serviceLog?.pool_fc_before, after: serviceLog?.pool_fc_after },
     ph: { before: serviceLog?.pool_ph_before, after: serviceLog?.pool_ph_after },
     ta: { before: serviceLog?.pool_ta_before, after: serviceLog?.pool_ta_after },
-    poolTemp: { before: serviceLog?.pool_temp_set, after: "" },
+    poolTemp: {
+      before: serviceLog?.pool_temp_before,
+      after: serviceLog?.pool_temp_set,
+    },
   };
   const spa = {
     tb: { before: serviceLog?.spa_tb_before, after: serviceLog?.spa_tb_after },
     fc: { before: serviceLog?.spa_fc_before, after: serviceLog?.spa_fc_after },
     ph: { before: serviceLog?.spa_ph_before, after: serviceLog?.spa_ph_after },
     ta: { before: serviceLog?.spa_ta_before, after: serviceLog?.spa_ta_after },
-    spaTemp: { before: "", after: serviceLog?.spa_temp },
+    spaTemp: {
+      before: serviceLog?.spa_temp_before,
+      after: serviceLog?.spa_temp,
+    },
   };
   const poolChem = {
     pucks: serviceLog?.pool_pucks,
