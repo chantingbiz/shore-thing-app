@@ -106,7 +106,7 @@ export default function ServicePhotoUploads({
         const saved = await patchServiceLog(technicianSlug, propertyId, {
           [slotDef.column]: publicUrl,
         });
-        console.log("[service photo] database update response", saved);
+        console.log("[service photo] database update", saved);
 
         if (!saved?.ok) {
           setError("Could not save photo URL to the service log.");

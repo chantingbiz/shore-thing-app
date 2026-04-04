@@ -387,8 +387,8 @@ export async function uploadServicePhoto(file, { propertyId, slot, serviceLogId 
   const ts = Date.now();
   const logFolder =
     serviceLogId && String(serviceLogId).trim() ? String(serviceLogId).trim() : "new";
-  const path = `${propertyId}/${logFolder}/${slot}-${ts}.${ext}`;
-  console.log("[service photo] upload path", path);
+  const filePath = `${propertyId}/${logFolder}/${slot}-${ts}.${ext}`;
+  console.log("[service photo] filePath", filePath);
 
   const contentType =
     file.type && String(file.type).trim()
@@ -401,25 +401,21 @@ export async function uploadServicePhoto(file, { propertyId, slot, serviceLogId 
             ? "image/gif"
             : "image/jpeg";
 
-  const { data, error } = await supabase.storage.from(SERVICE_PHOTOS_BUCKET).upload(path, file, {
+  const { data: uploadData, error } = await supabase.storage.from("pool-photos").upload(filePath, file, {
     cacheControl: "3600",
     upsert: false,
     contentType,
   });
-  console.log("[service photo] Supabase upload response", { data, error });
+  console.log("[service photo] upload result", { uploadData, error });
   if (error) {
     console.error("[service photo] upload threw", error);
     throw error;
   }
-  if (!data?.path) {
-    const err = new Error("Storage upload returned no path");
-    console.error("[service photo]", err);
-    throw err;
-  }
 
-  const { data: pub } = supabase.storage.from(SERVICE_PHOTOS_BUCKET).getPublicUrl(data.path);
-  console.log("[service photo] public URL", pub?.publicUrl);
-  return { path: data.path, publicUrl: pub.publicUrl };
+  const { data: publicUrlData } = supabase.storage.from("pool-photos").getPublicUrl(filePath);
+  const publicUrl = publicUrlData.publicUrl;
+  console.log("[service photo] publicUrl", publicUrl);
+  return { path: filePath, publicUrl };
 }
 
 /**
