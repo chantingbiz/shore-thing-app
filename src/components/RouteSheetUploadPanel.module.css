@@ -1,0 +1,136 @@
+.wrap {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.hint {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.fileRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fileInput {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.btn {
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.22);
+  color: #000;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.err {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  color: #ffb4b4;
+}
+
+.review {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.table th,
+.table td {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.35rem 0.4rem;
+  vertical-align: top;
+  text-align: left;
+}
+
+.table th {
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.table input[type="text"] {
+  width: 100%;
+  min-width: 6rem;
+  box-sizing: border-box;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+  font-size: 0.72rem;
+}
+
+.table select {
+  max-width: 100%;
+  padding: 0.2rem;
+  font-size: 0.72rem;
+}
+
+.statusMuted {
+  font-size: 0.68rem;
+  opacity: 0.9;
+}
+
+.actions {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.btnPrimary {
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(100, 180, 255, 0.35);
+  color: #000;
+  cursor: pointer;
+}
+
+.btnGhost {
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+}

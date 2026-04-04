@@ -1,3 +1,4 @@
+import { getTodayEasternDate } from "../lib/easternDate.js";
 import {
   getServiceLogRow,
   patchServiceLog,
@@ -33,7 +34,7 @@ export function setPoolStart(techSlug, propertyId, timestampMs) {
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: new Date().toISOString().split("T")[0],
+    service_date: getTodayEasternDate(),
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
@@ -47,7 +48,7 @@ export function setSpaStart(techSlug, propertyId, timestampMs) {
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: new Date().toISOString().split("T")[0],
+    service_date: getTodayEasternDate(),
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
@@ -61,7 +62,7 @@ export function clearPool(techSlug, propertyId) {
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: new Date().toISOString().split("T")[0],
+    service_date: getTodayEasternDate(),
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
@@ -74,7 +75,7 @@ export function clearSpa(techSlug, propertyId) {
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: new Date().toISOString().split("T")[0],
+    service_date: getTodayEasternDate(),
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;

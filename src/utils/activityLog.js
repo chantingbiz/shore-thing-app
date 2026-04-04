@@ -127,6 +127,14 @@ function mapEventTypeToDisplayLabel(ev) {
       return "Adjusted spa chemicals";
     case "chemical_updated":
       return "Adjusted chemicals";
+    case "pool_before_photo_added":
+      return "Added pool before photo";
+    case "pool_after_photo_added":
+      return "Added pool after photo";
+    case "spa_before_photo_added":
+      return "Added spa before photo";
+    case "spa_after_photo_added":
+      return "Added spa after photo";
     default:
       return ev.label || ev.type;
   }

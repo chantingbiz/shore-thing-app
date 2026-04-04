@@ -30,7 +30,7 @@ export function setPropertyCompletedForDay(
   console.log("Supabase write preflight", {
     property_slug: prop.slug,
     property_id: resolved,
-    service_date: new Date().toISOString().split("T")[0],
+    service_date: getLocalDayKey(),
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;

@@ -92,6 +92,14 @@ export default function AdminReadOnlyWorkView({
     ta: serviceLog?.spa_ta_added,
   };
 
+  const servicePhotoSlots = [
+    ["Pool · before", serviceLog?.pool_before_photo_url],
+    ["Pool · after", serviceLog?.pool_after_photo_url],
+    ["Spa · before", serviceLog?.spa_before_photo_url],
+    ["Spa · after", serviceLog?.spa_after_photo_url],
+  ];
+  const hasServicePhotos = servicePhotoSlots.some(([, url]) => url);
+
   const poolTs = getPoolStart(techSlug, propertySlug);
   const spaTs = getSpaStart(techSlug, propertySlug);
   const poolRun =
@@ -178,6 +186,22 @@ export default function AdminReadOnlyWorkView({
           </div>
         ))}
       </section>
+
+      {hasServicePhotos ? (
+        <section className={styles.section}>
+          <h2 className={styles.h2}>Service photos</h2>
+          <div className={styles.photoRow}>
+            {servicePhotoSlots.map(([lab, url]) =>
+              url ? (
+                <a key={lab} href={url} target="_blank" rel="noreferrer" className={styles.photoCell}>
+                  <span className={styles.photoLab}>{lab}</span>
+                  <img src={url} alt="" className={styles.photoImg} />
+                </a>
+              ) : null
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <p className={styles.saved}>
         {serviceLog ? "Service log loaded for today." : "No service log for today yet."}

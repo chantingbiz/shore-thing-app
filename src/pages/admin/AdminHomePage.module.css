@@ -1,0 +1,80 @@
+.navLink {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  text-decoration: none;
+}
+
+.navIcon {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+.archiveSection {
+  margin-top: 1.35rem;
+  padding: 1rem 1.05rem;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.archiveHint {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.78);
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.55);
+}
+
+/* Stacked with glassButtons.glassBtn + glassBtnFull */
+.archiveBtnAccent {
+  min-height: 4.5rem;
+  border-width: 2px;
+  border-color: rgba(120, 200, 255, 0.65);
+  background: linear-gradient(
+    165deg,
+    rgba(70, 140, 220, 0.22) 0%,
+    rgba(255, 255, 255, 0.1) 45%,
+    rgba(40, 100, 180, 0.18) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 10px 28px rgba(30, 80, 140, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.archiveBtnAccent:hover:not(:disabled) {
+  border-color: rgba(160, 220, 255, 0.85);
+  background: linear-gradient(
+    165deg,
+    rgba(90, 160, 240, 0.28) 0%,
+    rgba(255, 255, 255, 0.14) 45%,
+    rgba(50, 120, 200, 0.24) 100%
+  );
+}
+
+.archiveBtnInner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.archiveIcon {
+  flex-shrink: 0;
+  display: flex;
+  color: rgba(255, 255, 255, 0.95);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}

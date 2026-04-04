@@ -1,22 +1,31 @@
+import { getGuestCheckMode } from "./adminRouteStorage.js";
 import { getLastInteractionTimestamp } from "./activityLog.js";
 import { getLocalDayKey } from "./localDay.js";
-import { getPoolStart, getSpaStart } from "./hoseTimers.js";
 import { isPropertyCompletedToday } from "./propertyCompletion.js";
+import { hasPropertyActivityToday } from "./technicianPropertyStatus.js";
 
 /**
- * Sort tier (lower = higher on screen): active hoses → worked today → untouched → completed.
+ * Sort rank (lower = higher on screen). Completed always last (4).
+ * Among uncompleted: guest routes before check; within each, active (activity today) before not.
+ *
+ * 0 = active + uncompleted + guest (or unset → guest)
+ * 1 = uncompleted + guest + not active
+ * 2 = active + uncompleted + check
+ * 3 = uncompleted + check + not active
+ * 4 = completed
+ *
  * @param {string} techSlug
  * @param {string} propertySlug
  * @param {string} dayKey
  */
-export function getTechnicianPropertySortTier(techSlug, propertySlug, dayKey) {
-  if (isPropertyCompletedToday(techSlug, propertySlug, dayKey)) return 3;
-  // Live hose state is tracked per service log (requires propertyId); if unknown, treat as not active.
-  const active = false;
-  if (active) return 0;
-  const last = getLastInteractionTimestamp(techSlug, propertySlug, dayKey);
-  if (last != null) return 1;
-  return 2;
+function getTechnicianPropertySortRank(techSlug, propertySlug, dayKey) {
+  if (isPropertyCompletedToday(techSlug, propertySlug, dayKey)) return 4;
+  const active = hasPropertyActivityToday(techSlug, propertySlug, dayKey);
+  const isGuestRoute = getGuestCheckMode(propertySlug) !== "check";
+  if (isGuestRoute && active) return 0;
+  if (isGuestRoute && !active) return 1;
+  if (!isGuestRoute && active) return 2;
+  return 3;
 }
 
 /**
@@ -33,14 +42,14 @@ export function sortPropertiesForTechnicianList(
 ) {
   const index = new Map(properties.map((p, i) => [p.slug, i]));
   return [...properties].sort((a, b) => {
-    const ta = getTechnicianPropertySortTier(techSlug, a.slug, dayKey);
-    const tb = getTechnicianPropertySortTier(techSlug, b.slug, dayKey);
-    if (ta !== tb) return ta - tb;
-    if (ta === 2) {
-      return (index.get(a.slug) ?? 0) - (index.get(b.slug) ?? 0);
+    const ra = getTechnicianPropertySortRank(techSlug, a.slug, dayKey);
+    const rb = getTechnicianPropertySortRank(techSlug, b.slug, dayKey);
+    if (ra !== rb) return ra - rb;
+    if (ra === 0 || ra === 2) {
+      const la = getLastInteractionTimestamp(techSlug, a.slug, dayKey) ?? 0;
+      const lb = getLastInteractionTimestamp(techSlug, b.slug, dayKey) ?? 0;
+      return lb - la;
     }
-    const la = getLastInteractionTimestamp(techSlug, a.slug, dayKey) ?? 0;
-    const lb = getLastInteractionTimestamp(techSlug, b.slug, dayKey) ?? 0;
-    return lb - la;
+    return (index.get(a.slug) ?? 0) - (index.get(b.slug) ?? 0);
   });
 }

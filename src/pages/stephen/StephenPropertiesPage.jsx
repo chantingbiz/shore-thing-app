@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { STEPHEN_PROPERTIES } from "../../data/stephenProperties.js";
+import RouteSheetUploadPanel from "../../components/RouteSheetUploadPanel.jsx";
+import { getPropertiesForTechnician } from "../../lib/api.js";
+import { mergeStephenRouteListWithDb } from "../../utils/mergeTechnicianRouteList.js";
 import {
   elapsedSecondsSince,
   formatHoseElapsed,
@@ -15,7 +17,13 @@ import {
 import { sortPropertiesForTechnicianList } from "../../utils/technicianPropertyOrder.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
-import { primePropertiesBySlug, primeTechnicianToday } from "../../lib/supabaseStore.js";
+import {
+  ensurePropertiesBySlug,
+  ensureRouteSettings,
+  primePropertiesBySlug,
+  primeTechnicianToday,
+  resolveDbPropertyId,
+} from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import { flushPendingWorkNow } from "../../utils/workFlushRegistry.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
@@ -27,6 +35,17 @@ export default function StephenPropertiesPage() {
   useSupabaseSyncTick();
   const [now, setNow] = useState(() => Date.now());
   const [refreshTick, setRefreshTick] = useState(0);
+  const [dbProps, setDbProps] = useState([]);
+
+  const loadDbProps = useCallback(async () => {
+    try {
+      const rows = await getPropertiesForTechnician(TECH_SLUG);
+      setDbProps(rows);
+    } catch (e) {
+      console.error(e);
+      setDbProps([]);
+    }
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -34,14 +53,25 @@ export default function StephenPropertiesPage() {
   }, []);
 
   useEffect(() => {
-    primePropertiesBySlug(STEPHEN_PROPERTIES.map((p) => p.slug));
+    void loadDbProps();
+  }, [loadDbProps]);
+
+  const displayList = useMemo(() => mergeStephenRouteListWithDb(dbProps), [dbProps]);
+
+  useEffect(() => {
+    const slugs = displayList.map((p) => p.slug);
+    primePropertiesBySlug(slugs);
     primeTechnicianToday(TECH_SLUG, []);
-  }, []);
+    void ensurePropertiesBySlug(slugs).then(() => {
+      const ids = slugs.map((s) => resolveDbPropertyId(s)).filter(Boolean);
+      if (ids.length) void ensureRouteSettings(ids);
+    });
+  }, [displayList]);
 
   const sorted = useMemo(() => {
     void refreshTick;
-    return sortPropertiesForTechnicianList(STEPHEN_PROPERTIES, TECH_SLUG);
-  }, [refreshTick]);
+    return sortPropertiesForTechnicianList(displayList, TECH_SLUG);
+  }, [displayList, refreshTick]);
 
   const handleRefresh = useCallback(() => {
     setRefreshTick((n) => n + 1);
@@ -77,6 +107,14 @@ export default function StephenPropertiesPage() {
           Refresh
         </button>
       </div>
+      <RouteSheetUploadPanel
+        technicianSlug={TECH_SLUG}
+        routeCountHint={displayList.length}
+        onApplied={() => {
+          void loadDbProps();
+          setRefreshTick((n) => n + 1);
+        }}
+      />
       <nav className={styles.list} aria-label="Stephen properties">
         {sorted.map((p) => {
           const poolTs = getPoolStart(TECH_SLUG, p.slug);

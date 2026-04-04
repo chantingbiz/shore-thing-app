@@ -1,8 +1,16 @@
 import { supabase } from "./supabaseClient.js";
+import {
+  getEasternDayActivityBoundsUtc,
+  getTodayEasternDate,
+} from "./easternDate.js";
 
-export function todayISO() {
-  return new Date().toISOString().split("T")[0];
-}
+export { getTodayEasternDate } from "./easternDate.js";
+
+/** Supabase Storage bucket for pool/spa before/after images (public read). */
+export const SERVICE_PHOTOS_BUCKET = "service-photos";
+
+const SERVICE_LOG_SELECT_BASE =
+  "property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
 
 /** `service_logs` columns for Chemicals Added (not TA readings before/after). */
 export const SERVICE_LOG_CHEMICAL_COLUMNS = [
@@ -134,7 +142,7 @@ export async function upsertServiceLog(propertyId, techSlug, patch) {
   const payload = {
     property_id: propertyId,
     technician_slug: techSlug,
-    service_date: todayISO(),
+    service_date: getTodayEasternDate(),
     ...patch,
   };
 
@@ -178,11 +186,9 @@ export async function upsertServiceLog(propertyId, techSlug, patch) {
 export async function getServiceLogsForToday(techSlug) {
   const { data, error } = await supabase
     .from("service_logs")
-    .select(
-      "property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added"
-    )
+    .select(SERVICE_LOG_SELECT_BASE)
     .eq("technician_slug", techSlug)
-    .eq("service_date", todayISO());
+    .eq("service_date", getTodayEasternDate());
 
   if (error) throw error;
   return data ?? [];
@@ -209,12 +215,15 @@ export async function logActivity(techSlug, propertyId, eventType, eventLabel) {
 }
 
 export async function getActivityLogsForToday(techSlug) {
+  const { startIso, endExclusiveIso } = getEasternDayActivityBoundsUtc(
+    getTodayEasternDate()
+  );
   const { data, error } = await supabase
     .from("activity_logs")
     .select("technician_slug,property_id,event_type,event_label,created_at")
     .eq("technician_slug", techSlug)
-    .gte("created_at", `${todayISO()}T00:00:00.000Z`)
-    .lte("created_at", `${todayISO()}T23:59:59.999Z`)
+    .gte("created_at", startIso)
+    .lt("created_at", endExclusiveIso)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
@@ -276,6 +285,140 @@ export async function getPropertiesByIds(propertyIds) {
     .from("properties")
     .select("id,property_slug,name,address")
     .in("id", ids);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * All properties assigned to a technician (route sheet / DB source).
+ * @param {string} technicianSlug
+ */
+export async function getPropertiesForTechnician(technicianSlug) {
+  const slug = (technicianSlug ?? "").toLowerCase();
+  if (!slug) return [];
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id,technician_slug,property_slug,name,address,created_at")
+    .eq("technician_slug", slug)
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * @param {string} technicianSlug
+ * @param {string} propertySlug
+ */
+export async function getPropertyByTechnicianAndSlug(technicianSlug, propertySlug) {
+  const ts = (technicianSlug ?? "").toLowerCase();
+  const ps = (propertySlug ?? "").toLowerCase();
+  if (!ts || !ps) return null;
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id,technician_slug,property_slug,name,address,created_at")
+    .eq("technician_slug", ts)
+    .eq("property_slug", ps)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+/**
+ * @param {{ technician_slug: string, property_slug: string, name: string, address: string }} row
+ */
+export async function insertProperty(row) {
+  const { data, error } = await supabase
+    .from("properties")
+    .insert({
+      technician_slug: row.technician_slug,
+      property_slug: row.property_slug,
+      name: row.name,
+      address: row.address,
+    })
+    .select("id,technician_slug,property_slug,name,address,created_at")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * @param {string} propertyId
+ * @param {{ name?: string, address?: string, property_slug?: string }} patch
+ */
+export async function updateProperty(propertyId, patch) {
+  if (!propertyId) return null;
+  const payload = { ...patch };
+  const { data, error } = await supabase
+    .from("properties")
+    .update(payload)
+    .eq("id", propertyId)
+    .select("id,technician_slug,property_slug,name,address,created_at")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+function extFromFile(file) {
+  const name = file?.name || "";
+  const m = /\.([a-z0-9]+)$/i.exec(name);
+  if (m) return m[1].toLowerCase();
+  const t = file?.type || "";
+  if (t === "image/jpeg") return "jpg";
+  if (t === "image/png") return "png";
+  if (t === "image/webp") return "webp";
+  if (t === "image/gif") return "gif";
+  return "jpg";
+}
+
+/**
+ * Upload one image to Storage; returns public URL for storing on service_logs.
+ * @param {File} file
+ * @param {{ techSlug: string, propertyId: string, serviceDate: string, slot: string }} opts
+ */
+export async function uploadServicePhoto(file, { techSlug, propertyId, serviceDate, slot }) {
+  const ext = extFromFile(file);
+  const uid =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(Date.now());
+  const path = `${techSlug}/${propertyId}/${serviceDate}/${slot}-${uid}.${ext}`;
+  const { data, error } = await supabase.storage.from(SERVICE_PHOTOS_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from(SERVICE_PHOTOS_BUCKET).getPublicUrl(data.path);
+  return { path: data.path, publicUrl: pub.publicUrl };
+}
+
+/**
+ * Archive completed service_logs for the given Eastern calendar date into service_history (skips duplicate property+date).
+ * RPC also removes matching live rows: completed service_logs and that day’s activity_logs for archived properties (when deployed migration is applied).
+ * @param {string} serviceDate YYYY-MM-DD
+ * @returns {Promise<{ inserted?: number, deleted_service_logs?: number, deleted_activity_logs?: number } | unknown>}
+ */
+export async function archiveCompletedServiceLogs(serviceDate) {
+  const { data, error } = await supabase.rpc("archive_completed_service_logs", {
+    p_service_date: serviceDate,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * @param {{ startDate?: string, endDate?: string, limit?: number }} opts
+ */
+export async function getServiceHistoryRows(opts = {}) {
+  const limit = Math.min(Math.max(opts.limit ?? 300, 1), 500);
+  let q = supabase
+    .from("service_history")
+    .select(SERVICE_LOG_SELECT_BASE + ",id,activity_snapshot")
+    .order("service_date", { ascending: false })
+    .limit(limit);
+  if (opts.startDate) q = q.gte("service_date", opts.startDate);
+  if (opts.endDate) q = q.lte("service_date", opts.endDate);
+  const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }

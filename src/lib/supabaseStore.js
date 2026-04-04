@@ -200,7 +200,7 @@ export function getRouteSettingsRow(propertyId) {
 }
 
 export async function patchServiceLog(techSlug, propertyId, patch) {
-  if (!techSlug || !propertyId) return;
+  if (!techSlug || !propertyId) return { ok: false };
 
   // optimistic cache update
   const prev = getServiceLogRow(techSlug, propertyId) ?? {
@@ -221,8 +221,10 @@ export async function patchServiceLog(techSlug, propertyId, patch) {
     block.rowsByPropertyId.set(propertyId, saved ?? next);
     serviceLogsByTech.set(techSlug, block);
     emitter.emit();
+    return { ok: true, data: saved ?? next };
   } catch (e) {
     console.error("patchServiceLog failed:", e);
+    return { ok: false, error: e };
   }
 }
 

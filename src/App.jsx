@@ -13,6 +13,7 @@ import AdminActivityPropertyPage from "./pages/admin/AdminActivityPropertyPage.j
 import AdminRoutesPage from "./pages/admin/AdminRoutesPage.jsx";
 import AdminStephenRoutesPage from "./pages/admin/AdminStephenRoutesPage.jsx";
 import AdminRoutesPlaceholderPage from "./pages/admin/AdminRoutesPlaceholderPage.jsx";
+import AdminServiceHistoryPage from "./pages/admin/AdminServiceHistoryPage.jsx";
 
 export default function App() {
   return (
@@ -38,6 +39,10 @@ export default function App() {
             element={<AdminActivityDetailPage />}
           />
           <Route path="/administrator/activity" element={<AdminActivityPage />} />
+          <Route
+            path="/administrator/service-history"
+            element={<AdminServiceHistoryPage />}
+          />
 
           <Route
             path="/administrator/routes/stephen"
