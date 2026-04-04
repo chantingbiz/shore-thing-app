@@ -2,9 +2,54 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getPropertiesForTechnician } from "../lib/api.js";
 import { applyRouteSheetReviewRows } from "../utils/routeSheetApply.js";
 import { buildRouteSheetReviewRows } from "../utils/routeSheetMatch.js";
-import { parseRouteSheetText } from "../utils/routeSheetParser.js";
 import RouteSheetSummaryModal from "./RouteSheetSummaryModal.jsx";
 import styles from "./RouteSheetUploadPanel.module.css";
+
+const PARSE_ROUTE_SHEET_URL = "/.netlify/functions/parse-route-sheet";
+
+/**
+ * @param {unknown} data
+ * @returns {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>}
+ */
+function normalizeParsedRows(data) {
+  if (!Array.isArray(data)) return [];
+  const out = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const name = String(row.name ?? "").trim();
+    const address = String(row.address ?? "").trim();
+    const rt = String(row.routeType ?? "guest").toLowerCase();
+    const routeType = rt === "check" ? "check" : "guest";
+    const heat = Boolean(row.heat);
+    if (!name && !address) continue;
+    out.push({ name, address, routeType, heat });
+  }
+  return out;
+}
+
+/**
+ * @param {File} file
+ * @returns {Promise<{ imageBase64: string, mimeType: string }>}
+ */
+function fileToBase64Payload(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the image file."));
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      const m = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl.replace(/\r?\n/g, ""));
+      if (!m) {
+        reject(new Error("Could not read image as base64."));
+        return;
+      }
+      resolve({
+        mimeType: m[1]?.trim() || file.type || "image/jpeg",
+        imageBase64: m[2].trim(),
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 /**
  * @param {{ technicianSlug: string, onApplied?: () => void, routeCountHint?: number }} props
@@ -46,14 +91,46 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
       setSummaryModal(null);
       setOcrBusy(true);
       try {
-        const { createWorker } = await import("tesseract.js");
-        const worker = await createWorker("eng");
-        const {
-          data: { text },
-        } = await worker.recognize(file);
-        await worker.terminate();
+        const { imageBase64, mimeType } = await fileToBase64Payload(file);
 
-        const parsed = parseRouteSheetText(text);
+        const res = await fetch(PARSE_ROUTE_SHEET_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64, mimeType }),
+        });
+
+        const responseText = await res.text();
+        let payload;
+        try {
+          payload = JSON.parse(responseText);
+        } catch {
+          setParseErr(
+            res.ok
+              ? "Invalid response from parser. Try again."
+              : `Parse failed (${res.status}). ${responseText.slice(0, 280)}`
+          );
+          return;
+        }
+
+        if (!res.ok) {
+          const msg =
+            typeof payload?.error === "string"
+              ? payload.error
+              : `Parser error (${res.status})`;
+          const extra =
+            typeof payload?.detail === "string"
+              ? ` ${payload.detail}`
+              : typeof payload?.raw === "string"
+                ? ` ${payload.raw.slice(0, 200)}`
+                : "";
+          setParseErr(`${msg}.${extra}`.trim());
+          console.error("[route-sheet parse] API error", res.status, payload);
+          return;
+        }
+
+        const parsed = normalizeParsedRows(payload);
+        console.log("[route-sheet parse] rows from AI", parsed);
+
         setSoftHint(
           parsed.length === 0
             ? "Could not fully parse — please review and adjust."
@@ -65,7 +142,11 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
         setReviewRows(review);
       } catch (e) {
         console.error(e);
-        setParseErr("Could not read the image. Try again or use a smaller photo.");
+        setParseErr(
+          e instanceof Error && e.message
+            ? e.message
+            : "Could not read the image. Try again or use a smaller photo."
+        );
       } finally {
         setOcrBusy(false);
         if (fileRef.current) fileRef.current.value = "";
@@ -144,7 +225,7 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
           disabled={ocrBusy || saveBusy}
           onClick={() => fileRef.current?.click()}
         >
-          {ocrBusy ? "Reading sheet…" : "Choose photo"}
+          {ocrBusy ? "Analyzing sheet…" : "Choose photo"}
         </button>
       </div>
       {parseErr ? (

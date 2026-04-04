@@ -38,7 +38,7 @@ export function findPropertyMatch(dbRows, name, address) {
 
 /**
  * Build editable review rows from parsed sheet + DB.
- * @param {ReturnType<typeof import('./routeSheetParser.js').parseRouteSheetText>} parsed
+ * @param {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>} parsed
  * @param {Array<{ id: string, property_slug: string, name: string, address: string }>} dbRows
  * @param {string} technicianSlug
  */
