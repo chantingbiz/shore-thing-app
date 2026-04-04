@@ -6,11 +6,11 @@ import {
 
 export { getTodayEasternDate } from "./easternDate.js";
 
-/** Supabase Storage bucket for pool/spa before/after images (public read). */
-export const SERVICE_PHOTOS_BUCKET = "service-photos";
+/** Supabase Storage bucket for pool/spa before/after images (public read). Must match dashboard bucket id. */
+export const SERVICE_PHOTOS_BUCKET = "pool-photos";
 
 const SERVICE_LOG_SELECT_BASE =
-  "property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
+  "id,property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
 
 /** `service_logs` columns for Chemicals Added (not TA readings before/after). */
 export const SERVICE_LOG_CHEMICAL_COLUMNS = [
@@ -373,22 +373,52 @@ function extFromFile(file) {
 /**
  * Upload one image to Storage; returns public URL for storing on service_logs.
  * @param {File} file
- * @param {{ techSlug: string, propertyId: string, serviceDate: string, slot: string }} opts
+ * @param {{ propertyId: string, slot: string, serviceLogId?: string | null }} opts
  */
-export async function uploadServicePhoto(file, { techSlug, propertyId, serviceDate, slot }) {
+export async function uploadServicePhoto(file, { propertyId, slot, serviceLogId }) {
+  console.log("[service photo] selected file", {
+    name: file?.name,
+    type: file?.type,
+    size: file?.size,
+  });
+  console.log("[service photo] bucket", SERVICE_PHOTOS_BUCKET);
+
   const ext = extFromFile(file);
-  const uid =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : String(Date.now());
-  const path = `${techSlug}/${propertyId}/${serviceDate}/${slot}-${uid}.${ext}`;
+  const ts = Date.now();
+  const logFolder =
+    serviceLogId && String(serviceLogId).trim() ? String(serviceLogId).trim() : "new";
+  const path = `${propertyId}/${logFolder}/${slot}-${ts}.${ext}`;
+  console.log("[service photo] upload path", path);
+
+  const contentType =
+    file.type && String(file.type).trim()
+      ? file.type
+      : ext === "png"
+        ? "image/png"
+        : ext === "webp"
+          ? "image/webp"
+          : ext === "gif"
+            ? "image/gif"
+            : "image/jpeg";
+
   const { data, error } = await supabase.storage.from(SERVICE_PHOTOS_BUCKET).upload(path, file, {
     cacheControl: "3600",
     upsert: false,
-    contentType: file.type || undefined,
+    contentType,
   });
-  if (error) throw error;
+  console.log("[service photo] Supabase upload response", { data, error });
+  if (error) {
+    console.error("[service photo] upload threw", error);
+    throw error;
+  }
+  if (!data?.path) {
+    const err = new Error("Storage upload returned no path");
+    console.error("[service photo]", err);
+    throw err;
+  }
+
   const { data: pub } = supabase.storage.from(SERVICE_PHOTOS_BUCKET).getPublicUrl(data.path);
+  console.log("[service photo] public URL", pub?.publicUrl);
   return { path: data.path, publicUrl: pub.publicUrl };
 }
 
@@ -413,7 +443,7 @@ export async function getServiceHistoryRows(opts = {}) {
   const limit = Math.min(Math.max(opts.limit ?? 300, 1), 500);
   let q = supabase
     .from("service_history")
-    .select(SERVICE_LOG_SELECT_BASE + ",id,activity_snapshot")
+    .select(SERVICE_LOG_SELECT_BASE + ",activity_snapshot")
     .order("service_date", { ascending: false })
     .limit(limit);
   if (opts.startDate) q = q.gte("service_date", opts.startDate);

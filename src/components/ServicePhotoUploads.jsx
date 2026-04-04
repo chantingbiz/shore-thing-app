@@ -1,9 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { uploadServicePhoto } from "../lib/api.js";
-import { getLocalDayKey } from "../utils/localDay.js";
 import {
+  ensurePropertiesBySlug,
   patchServiceLog,
-  primePropertiesBySlug,
   resolveDbPropertyId,
 } from "../lib/supabaseStore.js";
 import { logTechnicianActivity } from "../utils/activityLog.js";
@@ -41,6 +40,19 @@ const SLOTS = [
   },
 ];
 
+/**
+ * Mobile browsers sometimes omit `type` or use non-standard values; still allow obvious image extensions.
+ * @param {File | undefined | null} file
+ */
+function isProbablyImageFile(file) {
+  if (!file) return false;
+  const t = (file.type || "").toLowerCase();
+  if (t.startsWith("image/")) return true;
+  const name = file.name || "";
+  if (/\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(name)) return true;
+  return false;
+}
+
 export default function ServicePhotoUploads({
   propertySlug,
   propertyName,
@@ -54,30 +66,48 @@ export default function ServicePhotoUploads({
   const handlePick = useCallback(
     async (slotDef, fileList) => {
       const file = fileList?.[0];
+      console.log("[service photo] input change", {
+        slot: slotDef.slot,
+        fileCount: fileList?.length ?? 0,
+        file: file
+          ? { name: file.name, type: file.type, size: file.size }
+          : null,
+      });
       if (!file || !propertySlug || !technicianSlug) return;
-      if (!file.type.startsWith("image/")) {
+      if (!isProbablyImageFile(file)) {
         setError("Please choose an image file.");
         return;
       }
-      primePropertiesBySlug([propertySlug]);
+      try {
+        await ensurePropertiesBySlug([propertySlug]);
+      } catch (e) {
+        console.error("[service photo] ensurePropertiesBySlug failed", e);
+        setError("Could not load property; try again.");
+        return;
+      }
       const propertyId = resolveDbPropertyId(propertySlug);
       if (!propertyId) {
         setError("Property is not loaded yet; try again.");
         return;
       }
+      const serviceLogId = serviceLogRow?.id ?? null;
+      console.log("[service photo] resolved ids", { propertyId, serviceLogId });
+
       setError(null);
       setBusySlot(slotDef.slot);
       try {
-        const serviceDate = getLocalDayKey();
         const { publicUrl } = await uploadServicePhoto(file, {
-          techSlug: technicianSlug,
           propertyId,
-          serviceDate,
           slot: slotDef.slot,
+          serviceLogId,
         });
+        console.log("[service photo] saving URL to column", slotDef.column, publicUrl);
+
         const saved = await patchServiceLog(technicianSlug, propertyId, {
           [slotDef.column]: publicUrl,
         });
+        console.log("[service photo] database update response", saved);
+
         if (!saved?.ok) {
           setError("Could not save photo URL to the service log.");
           return;
@@ -89,7 +119,7 @@ export default function ServicePhotoUploads({
           label: slotDef.label,
         });
       } catch (e) {
-        console.error("photo upload failed", e);
+        console.error("[service photo] upload or save failed", e);
         setError("Upload failed. Check Storage policies and try again.");
       } finally {
         setBusySlot(null);
@@ -97,7 +127,7 @@ export default function ServicePhotoUploads({
         if (ref) ref.value = "";
       }
     },
-    [propertySlug, propertyName, technicianSlug]
+    [propertySlug, propertyName, technicianSlug, serviceLogRow?.id]
   );
 
   return (
