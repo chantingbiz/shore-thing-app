@@ -3,6 +3,7 @@ import { getPropertiesForTechnician } from "../lib/api.js";
 import { applyRouteSheetReviewRows } from "../utils/routeSheetApply.js";
 import { buildRouteSheetReviewRows } from "../utils/routeSheetMatch.js";
 import { parseRouteSheetText } from "../utils/routeSheetParser.js";
+import RouteSheetSummaryModal from "./RouteSheetSummaryModal.jsx";
 import styles from "./RouteSheetUploadPanel.module.css";
 
 /**
@@ -14,9 +15,11 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
   const [dbCount, setDbCount] = useState(0);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [parseErr, setParseErr] = useState(null);
+  const [softHint, setSoftHint] = useState(null);
   const [reviewRows, setReviewRows] = useState(null);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
+  const [summaryModal, setSummaryModal] = useState(null);
 
   const refreshDbCount = useCallback(async () => {
     if (!tech) return;
@@ -37,8 +40,10 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
     async (file) => {
       if (!file || !tech) return;
       setParseErr(null);
+      setSoftHint(null);
       setSaveMsg(null);
       setReviewRows(null);
+      setSummaryModal(null);
       setOcrBusy(true);
       try {
         const { createWorker } = await import("tesseract.js");
@@ -49,19 +54,14 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
         await worker.terminate();
 
         const parsed = parseRouteSheetText(text);
-        if (!parsed.length) {
-          setParseErr(
-            "Could not read a table with Name and Address columns. Try a clearer photo or brighter light."
-          );
-          return;
-        }
+        setSoftHint(
+          parsed.length === 0
+            ? "Could not fully parse — please review and adjust."
+            : null
+        );
 
         const dbRows = await getPropertiesForTechnician(tech);
         const review = buildRouteSheetReviewRows(parsed, dbRows, tech);
-        if (!review.length) {
-          setParseErr("No valid rows found after parsing.");
-          return;
-        }
         setReviewRows(review);
       } catch (e) {
         console.error(e);
@@ -84,16 +84,19 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
     if (!reviewRows?.length || !tech) return;
     setSaveBusy(true);
     setSaveMsg(null);
+    setSummaryModal(null);
     try {
       const dbRows = await getPropertiesForTechnician(tech);
       const taken = new Set(dbRows.map((r) => r.property_slug.toLowerCase()));
-      const res = await applyRouteSheetReviewRows(reviewRows, taken);
-      const errPart =
-        res.errors.length > 0 ? ` Some rows failed: ${res.errors.map((e) => e.row).join(", ")}.` : "";
-      setSaveMsg(`Saved: ${res.created} new, ${res.updated} updated.${errPart}`);
+      const summary = await applyRouteSheetReviewRows(reviewRows, taken, dbRows);
       setReviewRows(null);
+      setSoftHint(null);
       await refreshDbCount();
       onApplied?.();
+      setSummaryModal(summary);
+      if (summary.errors.length > 0) {
+        setSaveMsg("Some rows could not be saved. See the summary.");
+      }
     } catch (e) {
       console.error(e);
       setSaveMsg("Save failed. Check Supabase permissions and the console.");
@@ -105,6 +108,7 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
   const cancelReview = useCallback(() => {
     setReviewRows(null);
     setParseErr(null);
+    setSoftHint(null);
     setSaveMsg(null);
   }, []);
 
@@ -118,6 +122,8 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
 
   return (
     <section className={styles.wrap} aria-label="Route sheet photo">
+      <RouteSheetSummaryModal summary={summaryModal} onClose={() => setSummaryModal(null)} />
+
       <h2 className={styles.title}>Route sheet</h2>
       <p className={styles.hint}>{uploadLabel}</p>
       <div className={styles.fileRow}>
@@ -142,100 +148,110 @@ export default function RouteSheetUploadPanel({ technicianSlug, onApplied, route
         </button>
       </div>
       {parseErr ? (
-        <p className={styles.err} role="alert">
-          {parseErr}
-        </p>
+        <div className={styles.errBanner}>
+          <p className={styles.err} role="alert">
+            {parseErr}
+          </p>
+        </div>
       ) : null}
-      {saveMsg ? <p className={styles.hint}>{saveMsg}</p> : null}
+      {softHint ? <p className={styles.parseNotice}>{softHint}</p> : null}
+      {saveMsg ? <p className={styles.feedback}>{saveMsg}</p> : null}
 
-      {reviewRows && reviewRows.length > 0 ? (
+      {reviewRows !== null ? (
         <div className={styles.review}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Address</th>
-                <th>Route</th>
-                <th>Heat</th>
-                <th>Technician</th>
-                <th>Match</th>
-                <th>Action</th>
-                <th>Slug</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reviewRows.map((r) => (
-                <tr key={r.key}>
-                  <td>
-                    <input
-                      type="text"
-                      value={r.name}
-                      onChange={(e) => updateRow(r.key, { name: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      value={r.address}
-                      onChange={(e) => updateRow(r.key, { address: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <select
-                      value={r.guestCheck}
-                      onChange={(e) =>
-                        updateRow(r.key, {
-                          guestCheck: e.target.value === "check" ? "check" : "guest",
-                        })
-                      }
-                    >
-                      <option value="guest">guest</option>
-                      <option value="check">check</option>
-                    </select>
-                  </td>
-                  <td>
-                    <label className={styles.statusMuted}>
-                      <input
-                        type="checkbox"
-                        checked={r.heat}
-                        onChange={(e) => updateRow(r.key, { heat: e.target.checked })}
-                      />{" "}
-                      heat
-                    </label>
-                  </td>
-                  <td>
-                    <span className={styles.statusMuted}>{r.technician_slug}</span>
-                  </td>
-                  <td>
-                    <span className={styles.statusMuted}>{r.matchStatus}</span>
-                  </td>
-                  <td>
-                    <span className={styles.statusMuted}>
-                      {r.action === "update" ? "Update existing" : "Create new"}
-                    </span>
-                  </td>
-                  <td>
-                    {r.action === "create" ? (
+          {reviewRows.length === 0 ? (
+            <p className={styles.parseNotice}>
+              Could not fully parse — please review and adjust. Add rows manually if needed, upload another
+              photo, or cancel.
+            </p>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Address</th>
+                  <th>Route</th>
+                  <th>Heat</th>
+                  <th>Technician</th>
+                  <th>Match</th>
+                  <th>Action</th>
+                  <th>Slug</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviewRows.map((r) => (
+                  <tr key={r.key}>
+                    <td>
                       <input
                         type="text"
-                        value={r.property_slug}
-                        onChange={(e) =>
-                          updateRow(r.key, { property_slug: e.target.value.toLowerCase().trim() })
-                        }
+                        value={r.name}
+                        onChange={(e) => updateRow(r.key, { name: e.target.value })}
                       />
-                    ) : (
-                      <span className={styles.statusMuted}>{r.property_slug}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={r.address}
+                        onChange={(e) => updateRow(r.key, { address: e.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={r.guestCheck}
+                        onChange={(e) =>
+                          updateRow(r.key, {
+                            guestCheck: e.target.value === "check" ? "check" : "guest",
+                          })
+                        }
+                      >
+                        <option value="guest">guest</option>
+                        <option value="check">check</option>
+                      </select>
+                    </td>
+                    <td>
+                      <label className={styles.statusMuted}>
+                        <input
+                          type="checkbox"
+                          checked={r.heat}
+                          onChange={(e) => updateRow(r.key, { heat: e.target.checked })}
+                        />{" "}
+                        heat
+                      </label>
+                    </td>
+                    <td>
+                      <span className={styles.statusMuted}>{r.technician_slug}</span>
+                    </td>
+                    <td>
+                      <span className={styles.statusMuted}>{r.matchStatus}</span>
+                    </td>
+                    <td>
+                      <span className={styles.statusMuted}>
+                        {r.action === "update" ? "Update existing" : "Create new"}
+                      </span>
+                    </td>
+                    <td>
+                      {r.action === "create" ? (
+                        <input
+                          type="text"
+                          value={r.property_slug}
+                          onChange={(e) =>
+                            updateRow(r.key, { property_slug: e.target.value.toLowerCase().trim() })
+                          }
+                        />
+                      ) : (
+                        <span className={styles.statusMuted}>{r.property_slug}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
           <div className={styles.actions}>
             <button
               type="button"
               className={styles.btnPrimary}
-              disabled={saveBusy}
+              disabled={saveBusy || reviewRows.length === 0}
               onClick={() => void handleSave()}
             >
               {saveBusy ? "Saving…" : "Confirm & save to route"}

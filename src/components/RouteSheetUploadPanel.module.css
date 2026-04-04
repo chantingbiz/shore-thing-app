@@ -1,25 +1,31 @@
 .wrap {
   margin-bottom: 1rem;
-  padding: 0.75rem 0.85rem;
+  padding: 0.85rem 0.95rem;
   border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .title {
   margin: 0 0 0.35rem;
   font-size: 0.9rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    0 0 12px rgba(0, 0, 0, 0.35);
 }
 
 .hint {
   margin: 0 0 0.55rem;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.97);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
 }
 
 .fileRow {
@@ -41,10 +47,11 @@
   border-radius: 0.65rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.22);
-  color: #000;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.32);
+  color: #111;
   cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
 .btn:disabled {
@@ -52,27 +59,75 @@
   cursor: not-allowed;
 }
 
+/* Image/read failure — high contrast, still clearly an alert */
+.errBanner {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(220, 70, 70, 0.45);
+  box-shadow:
+    0 0 14px rgba(255, 50, 50, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
 .err {
-  margin: 0.45rem 0 0;
-  font-size: 0.78rem;
-  color: #ffb4b4;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  font-weight: 700;
+  color: #111;
+  text-shadow:
+    0 0 8px rgba(255, 30, 30, 0.55),
+    0 0 2px rgba(255, 80, 80, 0.4);
+  -webkit-text-stroke: 0.45px rgba(180, 30, 30, 0.55);
+}
+
+/* Parse quality / review prompts — readable on glass */
+.parseNotice {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+}
+
+.feedback {
+  margin: 0.5rem 0 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.98);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.32);
 }
 
 .review {
   margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
   overflow-x: auto;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.74rem;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 .table th,
 .table td {
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   padding: 0.35rem 0.4rem;
   vertical-align: top;
   text-align: left;
@@ -80,7 +135,8 @@
 
 .table th {
   font-weight: 700;
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
 }
 
 .table input[type="text"] {
@@ -89,8 +145,8 @@
   box-sizing: border-box;
   padding: 0.2rem 0.35rem;
   border-radius: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.95);
   color: #000;
   font-size: 0.72rem;
 }
@@ -102,8 +158,11 @@
 }
 
 .statusMuted {
-  font-size: 0.68rem;
-  opacity: 0.9;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  opacity: 1;
 }
 
 .actions {
@@ -118,10 +177,11 @@
   border-radius: 0.65rem;
   font-size: 0.8125rem;
   font-weight: 700;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: rgba(100, 180, 255, 0.35);
-  color: #000;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(100, 180, 255, 0.42);
+  color: #0a1628;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .btnGhost {
@@ -129,8 +189,9 @@
   border-radius: 0.65rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   cursor: pointer;
 }

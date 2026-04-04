@@ -1,7 +1,21 @@
-import { insertProperty, updateProperty, updateRouteSettings } from "../lib/api.js";
+import {
+  getRouteSettings,
+  insertProperty,
+  updateProperty,
+  updateRouteSettings,
+} from "../lib/api.js";
 import { slugifyPropertyName, uniquePropertySlug } from "./routeSheetSlug.js";
 
+function normStr(s) {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
+ * Apply review rows only where data differs from DB; returns a structured summary for the UI.
+ *
  * @param {Array<{
  *   name: string,
  *   address: string,
@@ -12,26 +26,75 @@ import { slugifyPropertyName, uniquePropertySlug } from "./routeSheetSlug.js";
  *   existingPropertyId: string|null,
  *   property_slug: string,
  * }>} rows
- * @param {Set<string>} existingSlugsLower all slugs for technician before creates (for uniqueness)
+ * @param {Set<string>} existingSlugsLower
+ * @param {Array<{ id: string, property_slug: string, name: string, address: string }>} dbRows
  */
-export async function applyRouteSheetReviewRows(rows, existingSlugsLower) {
+export async function applyRouteSheetReviewRows(rows, existingSlugsLower, dbRows) {
   const taken = new Set(existingSlugsLower);
-  const results = { created: 0, updated: 0, errors: [] };
+  const dbById = new Map(dbRows.map((r) => [r.id, r]));
+
+  const propertyIds = dbRows.map((r) => r.id).filter(Boolean);
+  const settingsRows = propertyIds.length ? await getRouteSettings(propertyIds) : [];
+  const settingsByPropId = new Map(
+    settingsRows.map((s) => [s.property_id, { guest_check: s.guest_check, pool_heat: s.pool_heat }])
+  );
+
+  const summary = {
+    errors: [],
+    matchedExistingCount: 0,
+    createdCount: 0,
+    createdPropertyNames: [],
+    nameAddressChangeNames: [],
+    routeStatusChangeNames: [],
+    heatChangeNames: [],
+  };
 
   for (const row of rows) {
-    try {
-      const guest_check = row.guestCheck === "check" ? "check" : "guest";
-      const pool_heat = row.heat ? "heat" : "no_heat";
+    const displayName = row.name || row.property_slug || "Property";
+    const desiredGuest = row.guestCheck === "check" ? "check" : "guest";
+    const desiredHeat = row.heat ? "heat" : "no_heat";
 
+    try {
       if (row.action === "update" && row.existingPropertyId) {
-        let slug = row.property_slug;
-        await updateProperty(row.existingPropertyId, {
-          name: row.name,
-          address: row.address,
-        });
-        await updateRouteSettings(row.existingPropertyId, { guest_check, pool_heat });
-        results.updated += 1;
-        void slug;
+        const existing = dbById.get(row.existingPropertyId);
+        if (!existing) {
+          summary.errors.push({ row: displayName, message: "Missing existing property in cache" });
+          continue;
+        }
+        summary.matchedExistingCount += 1;
+
+        const prevSettings = settingsByPropId.get(row.existingPropertyId) ?? {
+          guest_check: "guest",
+          pool_heat: "no_heat",
+        };
+
+        const nameChanged = normStr(existing.name) !== normStr(row.name);
+        const addrChanged = normStr(existing.address) !== normStr(row.address);
+        if (nameChanged || addrChanged) {
+          await updateProperty(row.existingPropertyId, {
+            name: row.name,
+            address: row.address,
+          });
+          summary.nameAddressChangeNames.push(displayName);
+          existing.name = row.name;
+          existing.address = row.address;
+        }
+
+        const routeChanged = (prevSettings.guest_check || "guest") !== desiredGuest;
+        const heatChanged = (prevSettings.pool_heat || "no_heat") !== desiredHeat;
+
+        if (routeChanged || heatChanged) {
+          await updateRouteSettings(row.existingPropertyId, {
+            guest_check: desiredGuest,
+            pool_heat: desiredHeat,
+          });
+          settingsByPropId.set(row.existingPropertyId, {
+            guest_check: desiredGuest,
+            pool_heat: desiredHeat,
+          });
+          if (routeChanged) summary.routeStatusChangeNames.push(displayName);
+          if (heatChanged) summary.heatChangeNames.push(displayName);
+        }
       } else {
         let base = slugifyPropertyName(row.property_slug || row.name);
         let slug = base;
@@ -39,6 +102,7 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower) {
           slug = uniquePropertySlug(row.name, taken);
         }
         taken.add(slug.toLowerCase());
+
         const inserted = await insertProperty({
           technician_slug: row.technician_slug,
           property_slug: slug,
@@ -46,15 +110,22 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower) {
           address: row.address,
         });
         if (inserted?.id) {
-          await updateRouteSettings(inserted.id, { guest_check, pool_heat });
-          results.created += 1;
+          await updateRouteSettings(inserted.id, { guest_check: desiredGuest, pool_heat: desiredHeat });
+          summary.createdCount += 1;
+          summary.createdPropertyNames.push(row.name || inserted.property_slug || "Property");
         }
       }
     } catch (e) {
       console.error("route sheet row save failed", e);
-      results.errors.push({ row: row.name, message: String(e?.message ?? e) });
+      summary.errors.push({ row: displayName, message: String(e?.message ?? e) });
     }
   }
 
-  return results;
+  summary.hadAnyEffectiveChange =
+    summary.createdCount > 0 ||
+    summary.nameAddressChangeNames.length > 0 ||
+    summary.routeStatusChangeNames.length > 0 ||
+    summary.heatChangeNames.length > 0;
+
+  return summary;
 }
