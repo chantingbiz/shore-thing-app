@@ -8,10 +8,10 @@ import styles from "./RouteSheetUploadPanel.module.css";
 const PARSE_ROUTE_SHEET_URL = "/.netlify/functions/parse-route-sheet";
 
 /**
- * Lowercase, collapse repeated whitespace, trim (broad row text normalization).
+ * Lowercase + collapse whitespace + trim — for Service Type / comments columns only (not full row).
  * @param {unknown} raw
  */
-function normalizeRowText(raw) {
+function normLowerColumn(raw) {
   return String(raw ?? "")
     .toLowerCase()
     .replace(/\s+/g, " ")
@@ -65,15 +65,12 @@ function ownerCommentsColumnText(row) {
 }
 
 /**
- * Deliberate pool-heat detection: case-insensitive "heat" (HEAT / heat / Heat / YES POOL HEAT / LEAVE HEAT ON),
- * plus compact string (handles spaced letters / punctuation) and common OCR misreads.
- * @param {string} raw — full row text from all string fields
+ * Pool heat: case-insensitive "heat" anywhere in full row text; light OCR variants on compact string.
+ * @param {string} raw — all string fields joined for the row
  */
 function rowIndicatesHeat(raw) {
   if (!raw) return false;
-  // Primary: substring "heat" in any casing anywhere in the row
   if (/heat/i.test(raw)) return true;
-  // Spaced or punctuated: e.g. "H E A T", "HEAT!", "heat-on"
   const compact = String(raw)
     .toLowerCase()
     .replace(/\s+/g, "")
@@ -84,23 +81,24 @@ function rowIndicatesHeat(raw) {
 }
 
 /**
- * Guest/check: "check" only counts from Service Type. "clean" in Service Type or Owner → guest.
- * Prefer guest on ambiguity (clean overrides check in the same row). Row-wide "check" elsewhere does not create "check".
+ * Conservative guest/check: only Service Type may produce "check". "clean" in Service Type or rightmost
+ * comments → guest. Full row text is never used for check. Default guest.
  *
- * @param {string} serviceTypeNorm
- * @param {string} ownerNorm
+ * @param {string} serviceTypeLower — normalized Service Type only
+ * @param {string} commentsLower — normalized Owner / comments column only
  */
-function deriveGuestCheck(serviceTypeNorm, ownerNorm) {
-  if (serviceTypeNorm.includes("clean") || ownerNorm.includes("clean")) return "guest";
-  if (serviceTypeNorm.includes("check")) return "check";
+function deriveGuestCheck(serviceTypeLower, commentsLower) {
+  if (serviceTypeLower.includes("check")) return "check";
+  if (serviceTypeLower.includes("clean")) return "guest";
+  if (commentsLower.includes("clean")) return "guest";
   return "guest";
 }
 
 /**
  * Preview rules:
- * - heat: scan ALL string fields on the row; case-insensitive "heat" and compact/OCR fallbacks
- * - guest/check: check only from Service Type; clean in Service Type or Owner → guest; else default guest
- * - if heat then force guest (pool heat business rule before preview)
+ * - heat: all row strings; /heat/i + compact OCR (heot, heet, h3at)
+ * - guest/check: Service Type + comments columns only, exact decision order above
+ * - optional: pool heat on → force guest (matches save path)
  *
  * @param {unknown} data
  * @returns {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>}
@@ -116,9 +114,9 @@ function normalizeParsedRows(data) {
     const heatScanText = collectAllRowStrings(row);
     const heat = rowIndicatesHeat(heatScanText);
 
-    const serviceTypeNorm = normalizeRowText(serviceTypeColumnOnly(row));
-    const ownerNorm = normalizeRowText(ownerCommentsColumnText(row));
-    let routeType = deriveGuestCheck(serviceTypeNorm, ownerNorm);
+    const serviceTypeLower = normLowerColumn(serviceTypeColumnOnly(row));
+    const commentsLower = normLowerColumn(ownerCommentsColumnText(row));
+    let routeType = deriveGuestCheck(serviceTypeLower, commentsLower);
 
     if (heat) routeType = "guest";
 
