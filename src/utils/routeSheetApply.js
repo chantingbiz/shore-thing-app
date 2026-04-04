@@ -4,6 +4,7 @@ import {
   updateProperty,
   updateRouteSettings,
 } from "../lib/api.js";
+import { canonicalPoolHeatFromDb, normalizePoolHeatToDb } from "./poolHeatDb.js";
 import { slugifyPropertyName, uniquePropertySlug } from "./routeSheetSlug.js";
 
 function normStr(s) {
@@ -52,7 +53,7 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower, dbRows
   for (const row of rows) {
     const displayName = row.name || row.property_slug || "Property";
     const desiredGuest = row.guestCheck === "check" ? "check" : "guest";
-    const desiredHeat = row.heat ? "heat" : "no_heat";
+    const desiredPoolHeat = normalizePoolHeatToDb(row.heat);
 
     try {
       if (row.action === "update" && row.existingPropertyId) {
@@ -65,7 +66,7 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower, dbRows
 
         const prevSettings = settingsByPropId.get(row.existingPropertyId) ?? {
           guest_check: "guest",
-          pool_heat: "no_heat",
+          pool_heat: "no_pool_heat",
         };
 
         const nameChanged = normStr(existing.name) !== normStr(row.name);
@@ -81,16 +82,17 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower, dbRows
         }
 
         const routeChanged = (prevSettings.guest_check || "guest") !== desiredGuest;
-        const heatChanged = (prevSettings.pool_heat || "no_heat") !== desiredHeat;
+        const prevPoolHeat = canonicalPoolHeatFromDb(prevSettings.pool_heat);
+        const heatChanged = prevPoolHeat !== desiredPoolHeat;
 
         if (routeChanged || heatChanged) {
           await updateRouteSettings(row.existingPropertyId, {
             guest_check: desiredGuest,
-            pool_heat: desiredHeat,
+            pool_heat: desiredPoolHeat,
           });
           settingsByPropId.set(row.existingPropertyId, {
             guest_check: desiredGuest,
-            pool_heat: desiredHeat,
+            pool_heat: desiredPoolHeat,
           });
           if (routeChanged) summary.routeStatusChangeNames.push(displayName);
           if (heatChanged) summary.heatChangeNames.push(displayName);
@@ -110,7 +112,10 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower, dbRows
           address: row.address,
         });
         if (inserted?.id) {
-          await updateRouteSettings(inserted.id, { guest_check: desiredGuest, pool_heat: desiredHeat });
+          await updateRouteSettings(inserted.id, {
+            guest_check: desiredGuest,
+            pool_heat: desiredPoolHeat,
+          });
           summary.createdCount += 1;
           summary.createdPropertyNames.push(row.name || inserted.property_slug || "Property");
         }

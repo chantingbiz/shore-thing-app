@@ -31,7 +31,9 @@ export function getPoolHeatMode(propertyId) {
   const id = resolveDbPropertyId(propertyId);
   const row = id ? getRouteSettingsRow(id) : null;
   const v = row?.pool_heat;
-  return v === "heat" || v === "no_heat" ? v : null;
+  if (v === "pool_heat" || v === "heat") return "heat";
+  if (v === "no_pool_heat" || v === "no_heat") return "no_heat";
+  return null;
 }
 
 export function setPoolHeatMode(propertyId, mode) {
@@ -43,7 +45,8 @@ export function setPoolHeatMode(propertyId, mode) {
     onConflict: "property_id",
   });
   if (!resolved) return;
-  const v = mode === "heat" || mode === "no_heat" ? mode : null;
+  const v =
+    mode === "heat" ? "pool_heat" : mode === "no_heat" ? "no_pool_heat" : null;
   void patchRouteSettings(resolved, { pool_heat: v });
 }
 

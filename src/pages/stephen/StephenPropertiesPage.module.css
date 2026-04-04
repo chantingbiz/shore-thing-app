@@ -113,6 +113,15 @@
   width: 100%;
 }
 
+.cardNameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  pointer-events: auto;
+}
+
 .cardTopRight {
   display: flex;
   align-items: center;

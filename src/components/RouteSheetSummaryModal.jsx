@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import styles from "./RouteSheetSummaryModal.module.css";
 
 function uniq(names) {
@@ -10,6 +12,15 @@ function uniq(names) {
  * @param {{ summary: object | null, onClose: () => void }} props
  */
 export default function RouteSheetSummaryModal({ summary, onClose }) {
+  useEffect(() => {
+    if (!summary) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [summary, onClose]);
+
   if (!summary) return null;
 
   const {
@@ -33,7 +44,7 @@ export default function RouteSheetSummaryModal({ summary, onClose }) {
 
   const allAffected = uniq([...createdNames, ...nameAddr, ...routeCh, ...heatCh]);
 
-  return (
+  const node = (
     <div className={styles.backdrop} role="presentation" onClick={onClose}>
       <div
         className={styles.dialog}
@@ -42,9 +53,14 @@ export default function RouteSheetSummaryModal({ summary, onClose }) {
         aria-labelledby="route-sheet-summary-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="route-sheet-summary-title" className={styles.title}>
-          Route update summary
-        </h2>
+        <header className={styles.header}>
+          <h2 id="route-sheet-summary-title" className={styles.title}>
+            Route update summary
+          </h2>
+          <button type="button" className={styles.headerClose} onClick={onClose}>
+            Close
+          </button>
+        </header>
 
         <div className={styles.body}>
           <section className={styles.section}>
@@ -150,10 +166,15 @@ export default function RouteSheetSummaryModal({ summary, onClose }) {
           ) : null}
         </div>
 
-        <button type="button" className={styles.closeBtn} onClick={onClose}>
-          Close
-        </button>
+        <footer className={styles.footer}>
+          <button type="button" className={styles.closeBtn} onClick={onClose}>
+            Close
+          </button>
+        </footer>
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(node, document.body);
 }

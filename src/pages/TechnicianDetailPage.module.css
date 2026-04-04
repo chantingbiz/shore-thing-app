@@ -22,9 +22,17 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
+.routeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
 .routeName {
   font-weight: 600;
-  display: block;
+  flex: 1;
+  min-width: 0;
 }
 
 .routeAddr {

@@ -15,6 +15,7 @@ import {
   setPropertyCompletedForDay,
 } from "../../utils/propertyCompletion.js";
 import { sortPropertiesForTechnicianList } from "../../utils/technicianPropertyOrder.js";
+import PropertyInlineNameEdit from "../../components/PropertyInlineNameEdit.jsx";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
 import {
@@ -138,7 +139,14 @@ export default function StephenPropertiesPage() {
               />
               <div className={styles.cardInner}>
                 <div className={styles.cardTop}>
-                  <span className={styles.cardName}>{p.name}</span>
+                  <div className={styles.cardNameRow}>
+                    <span className={styles.cardName}>{p.name}</span>
+                    <PropertyInlineNameEdit
+                      propertyId={p.id}
+                      name={p.name}
+                      onUpdated={() => void loadDbProps()}
+                    />
+                  </div>
                   <div className={styles.cardTopRight}>
                     {hasActive ? (
                       <span className={styles.liveBadge} aria-hidden>
