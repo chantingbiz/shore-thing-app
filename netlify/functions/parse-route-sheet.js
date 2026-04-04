@@ -1,19 +1,21 @@
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 
-const EXTRACTION_PROMPT = `You are extracting structured rows from a pool-service route sheet photo.
+const EXTRACTION_PROMPT = `You are extracting structured rows from a pool-service route sheet photo or PDF.
 
-For each property/stop on the sheet, output one JSON object with exactly these keys:
-- "name": string — property or rental name as shown on the sheet
+For each property/stop row on the sheet, output one JSON object with exactly these keys:
+- "name": string — property or rental name as shown
 - "address": string — full address (number, street, city/area if visible)
-- "routeType": either "check" or "guest"
-- "heat": boolean
+- "serviceType": string — copy the cell text from the "Service Type" column for that row only (verbatim). If the column is missing or unreadable, use "".
+- "ownerComments": string — copy the cell text from the "Owner Information / Comments" column for that row only (verbatim). If the column is missing or unreadable, use "".
 
-Rules:
-- routeType: If the row's "Service Type" (or similar column/label) contains the word "Check" (case-insensitive), use "check". Otherwise use "guest".
-- heat: true if comments, notes, or text on the right side of the row contains the word "heat" anywhere (case-insensitive). Otherwise false.
-- Ignore unrelated owner comments for the name/address fields except when detecting "heat".
-- Best effort: extract every distinct property row you can read. Do not require exact table headers or a fixed layout.
-- Return ONLY a valid JSON array. No markdown fences, no commentary before or after. Example: [{"name":"Example","address":"123 Main St","routeType":"guest","heat":false}]`;
+Do NOT output routeType, heat, guest_check, or pool_heat. The app will derive those from serviceType and ownerComments.
+
+Rules for extraction only:
+- Map each row to the correct Service Type and Owner Information / Comments cells for that same row (do not mix rows).
+- Preserve wording/spelling from those two columns as closely as possible so substring checks work downstream.
+- Best effort: extract every distinct property row you can read.
+- Return ONLY a valid JSON array. No markdown fences, no commentary before or after.
+Example: [{"name":"Example","address":"123 Main St","serviceType":"Pool & Spa Check","ownerComments":"YES POOL HEAT"}]`;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

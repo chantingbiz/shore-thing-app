@@ -7,7 +7,44 @@ import styles from "./RouteSheetUploadPanel.module.css";
 
 const PARSE_ROUTE_SHEET_URL = "/.netlify/functions/parse-route-sheet";
 
+const RE_CHECK_IN_SERVICE_TYPE = /check/i;
+const RE_HEAT_IN_OWNER_COMMENTS = /heat/i;
+
 /**
+ * Verbatim text from the Service Type column (fallback: legacy "routeType" string from older API responses).
+ * @param {Record<string, unknown>} row
+ */
+function serviceTypeColumnText(row) {
+  const v =
+    row.serviceType ??
+    row.service_type ??
+    row["Service Type"] ??
+    "";
+  const s = String(v ?? "").trim();
+  if (s) return s;
+  return String(row.routeType ?? "").trim();
+}
+
+/**
+ * Verbatim text from Owner Information / Comments column.
+ * @param {Record<string, unknown>} row
+ */
+function ownerCommentsColumnText(row) {
+  const v =
+    row.ownerComments ??
+    row.owner_comments ??
+    row["Owner Information / Comments"] ??
+    row.ownerInformationComments ??
+    row.owner_information_comments ??
+    "";
+  return String(v ?? "").trim();
+}
+
+/**
+ * Preview rules (must match product spec before save):
+ * - guest/check: substring "check" (case-insensitive) anywhere in Service Type → check, else guest
+ * - heat: substring "heat" (case-insensitive) anywhere in Owner Information / Comments → true, else false
+ *
  * @param {unknown} data
  * @returns {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>}
  */
@@ -18,9 +55,17 @@ function normalizeParsedRows(data) {
     if (!row || typeof row !== "object") continue;
     const name = String(row.name ?? "").trim();
     const address = String(row.address ?? "").trim();
-    const rt = String(row.routeType ?? "guest").toLowerCase();
-    const routeType = rt === "check" ? "check" : "guest";
-    const heat = Boolean(row.heat);
+    const serviceTypeText = serviceTypeColumnText(row);
+    const ownerCommentsText = ownerCommentsColumnText(row);
+
+    const routeType = RE_CHECK_IN_SERVICE_TYPE.test(serviceTypeText) ? "check" : "guest";
+    const heat =
+      ownerCommentsText.length > 0
+        ? RE_HEAT_IN_OWNER_COMMENTS.test(ownerCommentsText)
+        : typeof row.heat === "boolean"
+          ? row.heat
+          : false;
+
     if (!name && !address) continue;
     out.push({ name, address, routeType, heat });
   }
