@@ -8,10 +8,10 @@ import styles from "./RouteSheetUploadPanel.module.css";
 const PARSE_ROUTE_SHEET_URL = "/.netlify/functions/parse-route-sheet";
 
 /**
- * Lowercase + collapse whitespace + trim — for Service Type / comments columns only (not full row).
+ * Normalize A: lowercase, trim, collapse repeated spaces.
  * @param {unknown} raw
  */
-function normLowerColumn(raw) {
+function normSpacedLower(raw) {
   return String(raw ?? "")
     .toLowerCase()
     .replace(/\s+/g, " ")
@@ -19,7 +19,18 @@ function normLowerColumn(raw) {
 }
 
 /**
- * Every distinct string value on the row object (any key) so heat scan misses no model/OCR field.
+ * Normalize B: lowercase, remove all spaces, remove punctuation (alnum only).
+ * @param {unknown} raw
+ */
+function normCompactAlnum(raw) {
+  return String(raw ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Every distinct string value on the row object (any key) for full-row heat scan.
  * @param {Record<string, unknown>} row
  */
 function collectAllRowStrings(row) {
@@ -37,7 +48,27 @@ function collectAllRowStrings(row) {
 }
 
 /**
- * Service Type column only (second column from the right in the sheet layout).
+ * All string fields except name/address keys (for clean detection).
+ * @param {Record<string, unknown>} row
+ */
+function collectNonNameAddressText(row) {
+  if (!row || typeof row !== "object") return "";
+  const seen = new Set();
+  const chunks = [];
+  for (const [k, v] of Object.entries(row)) {
+    const kl = String(k).toLowerCase();
+    if (kl === "name" || kl === "address") continue;
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    chunks.push(t);
+  }
+  return chunks.join(" ");
+}
+
+/**
+ * Service Type column only — sole source for "check".
  * @param {Record<string, unknown>} row
  */
 function serviceTypeColumnOnly(row) {
@@ -50,55 +81,122 @@ function serviceTypeColumnOnly(row) {
 }
 
 /**
- * Owner Information / Comments column (rightmost context column).
+ * Rule 1 — heat: both spaced + compact on full row text; broad variants + loose h+eat.
  * @param {Record<string, unknown>} row
  */
-function ownerCommentsColumnText(row) {
-  const v =
-    row.ownerComments ??
-    row.owner_comments ??
-    row["Owner Information / Comments"] ??
-    row.ownerInformationComments ??
-    row.owner_information_comments ??
-    "";
-  return String(v ?? "").trim();
-}
-
-/**
- * Pool heat: case-insensitive "heat" anywhere in full row text; light OCR variants on compact string.
- * @param {string} raw — all string fields joined for the row
- */
-function rowIndicatesHeat(raw) {
+function rowIndicatesHeat(row) {
+  const raw = collectAllRowStrings(row);
   if (!raw) return false;
+  const spaced = normSpacedLower(raw);
+  const compact = normCompactAlnum(raw);
+
   if (/heat/i.test(raw)) return true;
-  const compact = String(raw)
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^a-z0-9]/g, "");
-  if (compact.includes("heat")) return true;
-  if (compact.includes("heot") || compact.includes("heet") || compact.includes("h3at")) return true;
+
+  const spacedHeatFrags = [
+    "hea t",
+    "h eat",
+    "he at",
+    "pool heat",
+    "yes pool heat",
+    "leave heat on",
+    "heat on",
+    "poo1 heat",
+  ];
+  for (const frag of spacedHeatFrags) {
+    if (spaced.includes(frag)) return true;
+  }
+
+  const compactHeatFrags = [
+    "heat",
+    "heot",
+    "heet",
+    "h3at",
+    "poolheat",
+    "yespoolheat",
+    "leaveheaton",
+    "heaton",
+    "poo1heat",
+  ];
+  for (const frag of compactHeatFrags) {
+    if (compact.includes(frag)) return true;
+  }
+
+  for (let i = 0; i < compact.length; i++) {
+    if (compact[i] === "h" && compact.slice(i + 1).includes("eat")) return true;
+  }
   return false;
 }
 
 /**
- * Conservative guest/check: only Service Type may produce "check". "clean" in Service Type or rightmost
- * comments → guest. Full row text is never used for check. Default guest.
- *
- * @param {string} serviceTypeLower — normalized Service Type only
- * @param {string} commentsLower — normalized Owner / comments column only
+ * Rule 2 — conservative check: Service Type only, spaced + compact, allowlisted variants.
+ * @param {string} serviceTypeRaw
  */
-function deriveGuestCheck(serviceTypeLower, commentsLower) {
-  if (serviceTypeLower.includes("check")) return "check";
-  if (serviceTypeLower.includes("clean")) return "guest";
-  if (commentsLower.includes("clean")) return "guest";
-  return "guest";
+function serviceTypeIndicatesCheck(serviceTypeRaw) {
+  const st = String(serviceTypeRaw ?? "").trim();
+  if (!st) return false;
+
+  const spaced = normSpacedLower(st);
+  const spacedAnd = normSpacedLower(spaced.replace(/&/g, " and "));
+  const compact = normCompactAlnum(st);
+
+  if (/\bcheck\b/i.test(st)) return true;
+
+  const spacedPhrases = [
+    "spa check",
+    "pool check",
+    "pool and spa check",
+  ];
+  for (const p of spacedPhrases) {
+    if (spacedAnd.includes(p)) return true;
+  }
+
+  if (compact.includes("cheek") || compact.includes("checl")) return true;
+  if (compact.includes("check")) return true;
+
+  if (spaced.includes("chec k") || spaced.includes("ch eck")) return true;
+
+  return false;
 }
 
 /**
- * Preview rules:
- * - heat: all row strings; /heat/i + compact OCR (heot, heet, h3at)
- * - guest/check: Service Type + comments columns only, exact decision order above
- * - optional: pool heat on → force guest (matches save path)
+ * Rule 3 — clean: any column except name/address; broad variants.
+ * @param {Record<string, unknown>} row
+ */
+function rowIndicatesCleanNonNameAddress(row) {
+  const raw = collectNonNameAddressText(row);
+  if (!raw) return false;
+
+  const spaced = normSpacedLower(raw);
+  const spacedAnd = normSpacedLower(spaced.replace(/&/g, " and "));
+  const compact = normCompactAlnum(raw);
+
+  if (/\b(clean|cleaning)\b/i.test(raw)) return true;
+
+  if (
+    spaced.includes("pool & spa clean") ||
+    spacedAnd.includes("pool and spa clean") ||
+    spacedAnd.includes("spa clean") ||
+    spacedAnd.includes("pool clean")
+  ) {
+    return true;
+  }
+
+  if (spaced.includes("cle an") || spaced.includes("cl ean")) return true;
+
+  if (
+    compact.includes("clean") ||
+    compact.includes("ciean") ||
+    compact.includes("dean") ||
+    compact.includes("cleaning")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Rules 1–5: heat anywhere → check ST only → clean (non name/addr) → default guest → heat forces guest.
  *
  * @param {unknown} data
  * @returns {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>}
@@ -111,14 +209,27 @@ function normalizeParsedRows(data) {
     const name = String(row.name ?? "").trim();
     const address = String(row.address ?? "").trim();
 
-    const heatScanText = collectAllRowStrings(row);
-    const heat = rowIndicatesHeat(heatScanText);
+    const heat = rowIndicatesHeat(row);
+    const serviceTypeRaw = serviceTypeColumnOnly(row);
+    const isCheck = serviceTypeIndicatesCheck(serviceTypeRaw);
 
-    const serviceTypeLower = normLowerColumn(serviceTypeColumnOnly(row));
-    const commentsLower = normLowerColumn(ownerCommentsColumnText(row));
-    let routeType = deriveGuestCheck(serviceTypeLower, commentsLower);
+    let routeType = "guest";
 
-    if (heat) routeType = "guest";
+    if (isCheck) {
+      routeType = "check";
+    }
+
+    if (rowIndicatesCleanNonNameAddress(row)) {
+      routeType = "guest";
+    }
+
+    if (!isCheck) {
+      routeType = "guest";
+    }
+
+    if (heat) {
+      routeType = "guest";
+    }
 
     if (!name && !address) continue;
     out.push({ name, address, routeType, heat });
