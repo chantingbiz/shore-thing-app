@@ -19,28 +19,21 @@ function normalizeRowText(raw) {
 }
 
 /**
- * Concatenate all known string fields on the parsed row (any column) for heat / row-wide scans.
+ * Every distinct string value on the row object (any key) so heat scan misses no model/OCR field.
  * @param {Record<string, unknown>} row
  */
-function fullRowText(row) {
-  return [
-    row.name,
-    row.address,
-    row.serviceType,
-    row.service_type,
-    row["Service Type"],
-    row.ownerComments,
-    row.owner_comments,
-    row["Owner Information / Comments"],
-    row.ownerInformationComments,
-    row.owner_information_comments,
-    row.routeType,
-    row.notes,
-    row.comments,
-  ]
-    .map((p) => String(p ?? "").trim())
-    .filter(Boolean)
-    .join(" ");
+function collectAllRowStrings(row) {
+  if (!row || typeof row !== "object") return "";
+  const seen = new Set();
+  const chunks = [];
+  for (const v of Object.values(row)) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    chunks.push(t);
+  }
+  return chunks.join(" ");
 }
 
 /**
@@ -72,17 +65,22 @@ function ownerCommentsColumnText(row) {
 }
 
 /**
- * Heat: "heat" (or loose OCR variants) anywhere in the full row text after normalization.
- * @param {string} norm
+ * Deliberate pool-heat detection: case-insensitive "heat" (HEAT / heat / Heat / YES POOL HEAT / LEAVE HEAT ON),
+ * plus compact string (handles spaced letters / punctuation) and common OCR misreads.
+ * @param {string} raw — full row text from all string fields
  */
-function rowIndicatesHeat(norm) {
-  if (!norm) return false;
-  return (
-    norm.includes("heat") ||
-    norm.includes("heot") ||
-    norm.includes("heet") ||
-    norm.includes("h3at")
-  );
+function rowIndicatesHeat(raw) {
+  if (!raw) return false;
+  // Primary: substring "heat" in any casing anywhere in the row
+  if (/heat/i.test(raw)) return true;
+  // Spaced or punctuated: e.g. "H E A T", "HEAT!", "heat-on"
+  const compact = String(raw)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9]/g, "");
+  if (compact.includes("heat")) return true;
+  if (compact.includes("heot") || compact.includes("heet") || compact.includes("h3at")) return true;
+  return false;
 }
 
 /**
@@ -100,7 +98,7 @@ function deriveGuestCheck(serviceTypeNorm, ownerNorm) {
 
 /**
  * Preview rules:
- * - heat: normalized full-row text contains heat / heot / heet / h3at
+ * - heat: scan ALL string fields on the row; case-insensitive "heat" and compact/OCR fallbacks
  * - guest/check: check only from Service Type; clean in Service Type or Owner → guest; else default guest
  * - if heat then force guest (pool heat business rule before preview)
  *
@@ -115,8 +113,8 @@ function normalizeParsedRows(data) {
     const name = String(row.name ?? "").trim();
     const address = String(row.address ?? "").trim();
 
-    const rowNorm = normalizeRowText(fullRowText(row));
-    const heat = rowIndicatesHeat(rowNorm);
+    const heatScanText = collectAllRowStrings(row);
+    const heat = rowIndicatesHeat(heatScanText);
 
     const serviceTypeNorm = normalizeRowText(serviceTypeColumnOnly(row));
     const ownerNorm = normalizeRowText(ownerCommentsColumnText(row));

@@ -14,6 +14,8 @@ Rules for extraction only:
 - Map each row to the correct Service Type and Owner Information / Comments cells for that same row (do not mix rows).
 - "serviceType" must be ONLY the Service Type cell for that row — never merge in owner comments, property names, addresses, or adjacent columns.
 - "ownerComments" must be ONLY the Owner Information / Comments cell for that row — never merge in Service Type text.
+- CRITICAL for pool operations: carefully read HIGHLIGHTED, highlighter-colored, shaded, or emphasized text on the RIGHT side of each row (often yellow/green). That area frequently contains HEAT, YES POOL HEAT, LEAVE HEAT ON, etc. Transcribe EVERY legible word from those highlighted/right-side comment regions into "ownerComments" for that row. Do not skip highlighted text because it looks informal.
+- If a highlight visually belongs to a property row, attach that text to that row's "ownerComments" even if the column boundary is fuzzy.
 - Preserve wording/spelling from those two columns as closely as possible so substring checks work downstream.
 - Best effort: extract every distinct property row you can read.
 - Return ONLY a valid JSON array. No markdown fences, no commentary before or after.
