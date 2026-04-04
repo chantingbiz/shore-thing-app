@@ -1,4 +1,3 @@
-import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
 import {
   ensureActivityForToday,
   ensurePropertiesById,
@@ -22,13 +21,12 @@ export const ACTIVITY_GROUP_WINDOW_MS = 90_000;
  */
 export function logTechnicianActivity(techSlug, payload) {
   if (!techSlug || !payload?.propertySlug) return;
-  const prop =
-    techSlug === "stephen" ? getStephenPropertyBySlug(payload.propertySlug) : null;
-  if (!prop?.slug) return;
-  primePropertiesBySlug([prop.slug]);
-  const resolved = resolveDbPropertyId(prop.slug);
+  const slug = String(payload.propertySlug).trim();
+  if (!slug) return;
+  primePropertiesBySlug([slug]);
+  const resolved = resolveDbPropertyId(slug);
   console.log("Supabase write preflight", {
-    property_slug: prop.slug,
+    property_slug: slug,
     property_id: resolved,
     event_type: payload.type,
   });

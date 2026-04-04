@@ -23,11 +23,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/technicians" element={<TechniciansPage />} />
-          <Route
-            path="/technician/stephen/:propertySlug"
-            element={<StephenPropertyDetailPage />}
-          />
           <Route path="/technician/stephen" element={<StephenPropertiesPage />} />
+          <Route path="/technician/:slug/:propertySlug" element={<StephenPropertyDetailPage />} />
           <Route path="/technician/:slug" element={<TechnicianDetailPage />} />
 
           <Route

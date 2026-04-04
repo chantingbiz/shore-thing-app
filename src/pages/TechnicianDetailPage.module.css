@@ -35,6 +35,17 @@
   min-width: 0;
 }
 
+.routeNameLink {
+  composes: routeName;
+  color: inherit;
+  text-decoration: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.routeNameLink:hover {
+  text-decoration: underline;
+}
+
 .routeAddr {
   display: block;
   opacity: 0.88;

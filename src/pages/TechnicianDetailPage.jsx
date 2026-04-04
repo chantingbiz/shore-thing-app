@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import PropertyInlineNameEdit from "../components/PropertyInlineNameEdit.jsx";
 import RouteSheetUploadPanel from "../components/RouteSheetUploadPanel.jsx";
 import { getPropertiesForTechnician } from "../lib/api.js";
@@ -46,7 +46,12 @@ export default function TechnicianDetailPage() {
             {routeProps.map((p) => (
               <li key={p.id} className={styles.routeLi}>
                 <div className={styles.routeRow}>
-                  <span className={styles.routeName}>{p.name}</span>
+                  <Link
+                    to={`/technician/${techSlug}/${p.property_slug}`}
+                    className={styles.routeNameLink}
+                  >
+                    {p.name}
+                  </Link>
                   <PropertyInlineNameEdit
                     propertyId={p.id}
                     name={p.name}

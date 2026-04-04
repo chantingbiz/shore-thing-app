@@ -9,6 +9,21 @@ import {
 import { getLocalDayKey } from "./localDay.js";
 
 /**
+ * Resolve list/card property slug: Stephen static seed entries use canonical slug from data;
+ * all other technicians (and DB-only Stephen rows) use the slug as-is.
+ * @param {string} techSlug
+ * @param {string} propertySlug
+ */
+function completionPropertySlug(techSlug, propertySlug) {
+  if (!propertySlug) return "";
+  if (techSlug === "stephen") {
+    const s = getStephenPropertyBySlug(propertySlug);
+    if (s?.slug) return s.slug;
+  }
+  return propertySlug;
+}
+
+/**
  * @param {string} techSlug
  * @param {string} propertySlug
  * @param {boolean} completed
@@ -22,13 +37,12 @@ export function setPropertyCompletedForDay(
 ) {
   void dayKey;
   if (!techSlug || !propertySlug) return;
-  const prop =
-    techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  if (!prop?.slug) return;
-  primePropertiesBySlug([prop.slug]);
-  const resolved = resolveDbPropertyId(prop.slug);
+  const slug = completionPropertySlug(techSlug, propertySlug);
+  if (!slug) return;
+  primePropertiesBySlug([slug]);
+  const resolved = resolveDbPropertyId(slug);
   console.log("Supabase write preflight", {
-    property_slug: prop.slug,
+    property_slug: slug,
     property_id: resolved,
     service_date: getLocalDayKey(),
     onConflict: "property_id,service_date",
@@ -60,10 +74,9 @@ export function isPropertyCompletedToday(
 ) {
   void dayKey;
   if (!techSlug || !propertySlug) return false;
-  const prop =
-    techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  if (!prop?.slug) return false;
-  const id = resolveDbPropertyId(prop.slug);
+  const slug = completionPropertySlug(techSlug, propertySlug);
+  if (!slug) return false;
+  const id = resolveDbPropertyId(slug);
   if (!id) return false;
   const row = getServiceLogRow(techSlug, id);
   return !!row?.completed;
@@ -76,10 +89,9 @@ export function getPropertyCompletedAt(
 ) {
   void dayKey;
   if (!techSlug || !propertySlug) return null;
-  const prop =
-    techSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  if (!prop?.slug) return null;
-  const id = resolveDbPropertyId(prop.slug);
+  const slug = completionPropertySlug(techSlug, propertySlug);
+  if (!slug) return null;
+  const id = resolveDbPropertyId(slug);
   if (!id) return null;
   const row = getServiceLogRow(techSlug, id);
   const t = row?.completed_at ? Date.parse(row.completed_at) : null;
