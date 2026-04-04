@@ -7,8 +7,6 @@ import styles from "./RouteSheetUploadPanel.module.css";
 
 const PARSE_ROUTE_SHEET_URL = "/.netlify/functions/parse-route-sheet";
 
-const RE_CHECK_IN_SERVICE_TYPE = /check/i;
-
 /**
  * Lowercase, strip spaces and punctuation (keep letters + digits) for OCR-tolerant heat scan.
  * @param {unknown} raw
@@ -21,7 +19,7 @@ function normalizeForHeatOcr(raw) {
 }
 
 /**
- * Loose heat detection on normalized string (no spaces/punctuation).
+ * Aggressive loose heat detection on normalized string (no spaces/punctuation).
  * @param {string} norm
  */
 function detectLooseHeatFromNormalized(norm) {
@@ -30,29 +28,31 @@ function detectLooseHeatFromNormalized(norm) {
   if (norm.includes("heot")) return true;
   if (norm.includes("heet")) return true;
   if (norm.includes("h3at")) return true;
+  if (norm.includes("heaton")) return true;
+  if (norm.includes("poolheat")) return true;
+  if (norm.includes("leaveheaton")) return true;
+  if (norm.includes("yespoolheat")) return true;
   for (let i = 0; i < norm.length; i++) {
     if (norm[i] === "h" && norm.slice(i + 1).includes("eat")) return true;
   }
+  if (norm.includes("hea")) return true;
+  if (norm.includes("eaton")) return true;
   return false;
 }
 
 /**
- * When owner/comments column is empty: scan other row strings (OCR blob fallback).
+ * When owner/comments column is empty: scan other row strings (OCR blob fallback; excludes Service Type / routeType).
  * @param {Record<string, unknown>} row
  */
 function rowTextFallbackForHeat(row) {
   const parts = [
     row.name,
     row.address,
-    row.serviceType,
-    row.service_type,
-    row["Service Type"],
     row.ownerComments,
     row.owner_comments,
     row["Owner Information / Comments"],
     row.ownerInformationComments,
     row.owner_information_comments,
-    row.routeType,
     row.notes,
     row.comments,
   ];
@@ -63,18 +63,27 @@ function rowTextFallbackForHeat(row) {
 }
 
 /**
- * Verbatim text from the Service Type column (fallback: legacy "routeType" string from older API responses).
+ * Service Type column ONLY — no routeType or other-field fallback (avoids false "check").
  * @param {Record<string, unknown>} row
  */
-function serviceTypeColumnText(row) {
+function serviceTypeColumnOnly(row) {
   const v =
     row.serviceType ??
     row.service_type ??
     row["Service Type"] ??
     "";
-  const s = String(v ?? "").trim();
-  if (s) return s;
-  return String(row.routeType ?? "").trim();
+  return String(v ?? "").trim();
+}
+
+/**
+ * Lowercase, collapse internal whitespace, trim — for strict "check" substring test on Service Type only.
+ * @param {unknown} raw
+ */
+function normalizeServiceTypeForCheck(raw) {
+  return String(raw ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -94,8 +103,9 @@ function ownerCommentsColumnText(row) {
 
 /**
  * Preview rules (must match product spec before save):
- * - guest/check: substring "check" (case-insensitive) anywhere in Service Type → check, else guest
- * - heat: normalized loose match on Owner Information / Comments if present; else same logic on other row text
+ * - guest/check: ONLY Service Type column; normalized text must contain substring "check", else guest
+ * - heat: aggressive normalized match on Owner Information / Comments if present; else fallback row text (not Service Type)
+ * - business rule: if heat then force guest (never check with pool heat on)
  *
  * @param {unknown} data
  * @returns {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>}
@@ -107,14 +117,17 @@ function normalizeParsedRows(data) {
     if (!row || typeof row !== "object") continue;
     const name = String(row.name ?? "").trim();
     const address = String(row.address ?? "").trim();
-    const serviceTypeText = serviceTypeColumnText(row);
+    const serviceTypeRaw = serviceTypeColumnOnly(row);
     const ownerCommentsText = ownerCommentsColumnText(row);
 
-    const routeType = RE_CHECK_IN_SERVICE_TYPE.test(serviceTypeText) ? "check" : "guest";
+    const serviceTypeNorm = normalizeServiceTypeForCheck(serviceTypeRaw);
+    let routeType = serviceTypeNorm.includes("check") ? "check" : "guest";
 
     const heatSource =
       ownerCommentsText.length > 0 ? ownerCommentsText : rowTextFallbackForHeat(row);
     const heat = detectLooseHeatFromNormalized(normalizeForHeatOcr(heatSource));
+
+    if (heat) routeType = "guest";
 
     if (!name && !address) continue;
     out.push({ name, address, routeType, heat });

@@ -52,7 +52,9 @@ export async function applyRouteSheetReviewRows(rows, existingSlugsLower, dbRows
 
   for (const row of rows) {
     const displayName = row.name || row.property_slug || "Property";
-    const desiredGuest = row.guestCheck === "check" ? "check" : "guest";
+    const desiredGuestRaw = row.guestCheck === "check" ? "check" : "guest";
+    // Business rule: pool heat on → always guest (never check)
+    const desiredGuest = row.heat ? "guest" : desiredGuestRaw;
     const desiredPoolHeat = normalizePoolHeatToDb(row.heat);
 
     try {

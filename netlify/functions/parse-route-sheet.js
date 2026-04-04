@@ -12,6 +12,8 @@ Do NOT output routeType, heat, guest_check, or pool_heat. The app will derive th
 
 Rules for extraction only:
 - Map each row to the correct Service Type and Owner Information / Comments cells for that same row (do not mix rows).
+- "serviceType" must be ONLY the Service Type cell for that row — never merge in owner comments, property names, addresses, or adjacent columns.
+- "ownerComments" must be ONLY the Owner Information / Comments cell for that row — never merge in Service Type text.
 - Preserve wording/spelling from those two columns as closely as possible so substring checks work downstream.
 - Best effort: extract every distinct property row you can read.
 - Return ONLY a valid JSON array. No markdown fences, no commentary before or after.
