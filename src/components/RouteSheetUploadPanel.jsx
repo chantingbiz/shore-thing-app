@@ -8,7 +8,59 @@ import styles from "./RouteSheetUploadPanel.module.css";
 const PARSE_ROUTE_SHEET_URL = "/.netlify/functions/parse-route-sheet";
 
 const RE_CHECK_IN_SERVICE_TYPE = /check/i;
-const RE_HEAT_IN_OWNER_COMMENTS = /heat/i;
+
+/**
+ * Lowercase, strip spaces and punctuation (keep letters + digits) for OCR-tolerant heat scan.
+ * @param {unknown} raw
+ */
+function normalizeForHeatOcr(raw) {
+  return String(raw ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Loose heat detection on normalized string (no spaces/punctuation).
+ * @param {string} norm
+ */
+function detectLooseHeatFromNormalized(norm) {
+  if (!norm) return false;
+  if (norm.includes("heat")) return true;
+  if (norm.includes("heot")) return true;
+  if (norm.includes("heet")) return true;
+  if (norm.includes("h3at")) return true;
+  for (let i = 0; i < norm.length; i++) {
+    if (norm[i] === "h" && norm.slice(i + 1).includes("eat")) return true;
+  }
+  return false;
+}
+
+/**
+ * When owner/comments column is empty: scan other row strings (OCR blob fallback).
+ * @param {Record<string, unknown>} row
+ */
+function rowTextFallbackForHeat(row) {
+  const parts = [
+    row.name,
+    row.address,
+    row.serviceType,
+    row.service_type,
+    row["Service Type"],
+    row.ownerComments,
+    row.owner_comments,
+    row["Owner Information / Comments"],
+    row.ownerInformationComments,
+    row.owner_information_comments,
+    row.routeType,
+    row.notes,
+    row.comments,
+  ];
+  return parts
+    .map((p) => String(p ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
 
 /**
  * Verbatim text from the Service Type column (fallback: legacy "routeType" string from older API responses).
@@ -43,7 +95,7 @@ function ownerCommentsColumnText(row) {
 /**
  * Preview rules (must match product spec before save):
  * - guest/check: substring "check" (case-insensitive) anywhere in Service Type → check, else guest
- * - heat: substring "heat" (case-insensitive) anywhere in Owner Information / Comments → true, else false
+ * - heat: normalized loose match on Owner Information / Comments if present; else same logic on other row text
  *
  * @param {unknown} data
  * @returns {Array<{ name: string, address: string, routeType: 'guest'|'check', heat: boolean }>}
@@ -59,12 +111,10 @@ function normalizeParsedRows(data) {
     const ownerCommentsText = ownerCommentsColumnText(row);
 
     const routeType = RE_CHECK_IN_SERVICE_TYPE.test(serviceTypeText) ? "check" : "guest";
-    const heat =
-      ownerCommentsText.length > 0
-        ? RE_HEAT_IN_OWNER_COMMENTS.test(ownerCommentsText)
-        : typeof row.heat === "boolean"
-          ? row.heat
-          : false;
+
+    const heatSource =
+      ownerCommentsText.length > 0 ? ownerCommentsText : rowTextFallbackForHeat(row);
+    const heat = detectLooseHeatFromNormalized(normalizeForHeatOcr(heatSource));
 
     if (!name && !address) continue;
     out.push({ name, address, routeType, heat });
