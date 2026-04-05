@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { getStephenPropertyBySlug } from "../../data/stephenProperties.js";
 import { getTechnicianBySlug } from "../../data/technicians.js";
-import { getPropertyByTechnicianAndSlug, mapWorkStateToServiceLogPatch } from "../../lib/api.js";
+import {
+  diffServiceLogPatch,
+  emptyServiceLogWorkPatch,
+  getPropertyByTechnicianAndSlug,
+  mapWorkStateToServiceLogPatch,
+  workStateFromServiceLogRow,
+} from "../../lib/api.js";
 import PropertyHoseControls from "../../components/PropertyHoseControls.jsx";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import ReadingsForm from "../../components/ReadingsForm.jsx";
@@ -10,6 +16,7 @@ import ServicePhotoUploads from "../../components/ServicePhotoUploads.jsx";
 import { logTechnicianActivity } from "../../utils/activityLog.js";
 import { getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
 import {
+  ensureServiceLogsForToday,
   getServiceLogRow,
   patchServiceLog,
   primePropertiesBySlug,
@@ -52,6 +59,16 @@ export default function StephenPropertyDetailPage() {
   const chemSpaSigRef = useRef(null);
   const [, setRoutePoll] = useState(0);
 
+  const [serviceLogsReady, setServiceLogsReady] = useState(false);
+  const baselineWorkPatchRef = useRef(null);
+  const baselineRowKeyRef = useRef("");
+
+  useEffect(() => {
+    if (!technicianSlug) return;
+    setServiceLogsReady(false);
+    void ensureServiceLogsForToday(technicianSlug).finally(() => setServiceLogsReady(true));
+  }, [technicianSlug]);
+
   useEffect(() => {
     readingsPoolSigRef.current = null;
     readingsSpaSigRef.current = null;
@@ -90,28 +107,71 @@ export default function StephenPropertyDetailPage() {
     primeTechnicianToday(technicianSlug, []);
   }, [property, technicianSlug]);
 
+  const resolved = property ? resolveDbPropertyId(property.slug) : null;
+  const serviceLogRow = resolved ? getServiceLogRow(technicianSlug, resolved) : null;
+
+  useEffect(() => {
+    baselineRowKeyRef.current = "";
+  }, [propertySlug, technicianSlug]);
+
+  useEffect(() => {
+    if (!serviceLogsReady || !resolved || !property) return;
+    const rowKey = `${technicianSlug}:${property.slug}:${serviceLogRow?.id ?? "none"}`;
+    if (baselineRowKeyRef.current === rowKey && baselineWorkPatchRef.current != null) return;
+    baselineRowKeyRef.current = rowKey;
+    if (serviceLogRow) {
+      const ws = workStateFromServiceLogRow(serviceLogRow);
+      baselineWorkPatchRef.current = ws
+        ? mapWorkStateToServiceLogPatch({
+            pool: ws.pool,
+            spa: ws.spa,
+            poolChem: ws.poolChem,
+            spaChem: ws.spaChem,
+          })
+        : emptyServiceLogWorkPatch();
+    } else {
+      baselineWorkPatchRef.current = emptyServiceLogWorkPatch();
+    }
+  }, [
+    serviceLogsReady,
+    resolved,
+    property?.slug,
+    technicianSlug,
+    serviceLogRow,
+    serviceLogRow?.id,
+  ]);
+
   const handleWorkStateChange = useCallback(
-    (state) => {
+    async (state) => {
       if (!property) return;
       const prop = property;
 
       primePropertiesBySlug([prop.slug]);
-      const resolved = resolveDbPropertyId(prop.slug);
+      const propertyId = resolveDbPropertyId(prop.slug);
       console.log("Supabase write preflight", {
         property_slug: prop.slug,
-        property_id: resolved,
+        property_id: propertyId,
         service_date: getLocalDayKey(),
         onConflict: "property_id,service_date",
       });
-      if (!resolved) return;
+      if (!propertyId) return;
 
       const poolHose = getPoolStart(technicianSlug, prop.slug) != null;
       const spaHose = getSpaStart(technicianSlug, prop.slug) != null;
       void poolHose;
       void spaHose;
-      void patchServiceLog(technicianSlug, resolved, {
-        ...mapWorkStateToServiceLogPatch(state),
-      });
+
+      const base = baselineWorkPatchRef.current;
+      if (base != null) {
+        const full = mapWorkStateToServiceLogPatch(state);
+        const patch = diffServiceLogPatch(base, full);
+        if (Object.keys(patch).length > 0) {
+          const r = await patchServiceLog(technicianSlug, propertyId, patch);
+          if (r?.ok) {
+            baselineWorkPatchRef.current = { ...base, ...patch };
+          }
+        }
+      }
 
       const poolR = JSON.stringify(state.pool);
       const spaR = JSON.stringify(state.spa);
@@ -170,9 +230,6 @@ export default function StephenPropertyDetailPage() {
     [property, technicianSlug]
   );
 
-  const resolved = property ? resolveDbPropertyId(property.slug) : null;
-  const serviceLogRow = resolved ? getServiceLogRow(technicianSlug, resolved) : null;
-
   if (!technician) {
     return <Navigate to="/technicians" replace />;
   }
@@ -217,6 +274,7 @@ export default function StephenPropertyDetailPage() {
           idPrefix={property.slug}
           onWorkStateChange={handleWorkStateChange}
           serviceLogRow={serviceLogRow}
+          serviceLogsReady={serviceLogsReady}
         />
       </div>
     </SubpageTemplate>

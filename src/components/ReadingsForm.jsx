@@ -191,6 +191,8 @@ export default function ReadingsForm({
   idPrefix = "readings",
   onWorkStateChange,
   serviceLogRow,
+  /** When false, no autosave or unmount flush (wait until today's service_logs are loaded for this tech). */
+  serviceLogsReady = false,
 }) {
   const [pool, setPool] = useState(() => ({
     tb: pair(),
@@ -238,7 +240,10 @@ export default function ReadingsForm({
 
   useEffect(() => {
     if (!onWorkStateChange) return undefined;
-    const flush = () => onWorkRef.current?.(stateRef.current);
+    const flush = () => {
+      if (!hasUserEditedRef.current) return;
+      onWorkRef.current?.(stateRef.current);
+    };
     registerWorkFlush(flush);
     return () => {
       unregisterWorkFlush();
@@ -275,12 +280,13 @@ export default function ReadingsForm({
   };
 
   useEffect(() => {
-    if (!onWorkStateChange) return undefined;
+    if (!onWorkStateChange || !serviceLogsReady) return undefined;
     const id = window.setTimeout(() => {
+      if (!hasUserEditedRef.current) return;
       onWorkRef.current?.(stateRef.current);
     }, 1200);
     return () => clearTimeout(id);
-  }, [pool, spa, poolChem, spaChem, onWorkStateChange]);
+  }, [pool, spa, poolChem, spaChem, onWorkStateChange, serviceLogsReady]);
 
   return (
     <div className={styles.wrap}>

@@ -91,6 +91,50 @@ export function mapWorkStateToServiceLogPatch(state) {
   };
 }
 
+/** Default nested work state (all empty strings) for new service_logs rows. */
+export function emptyNestedWorkStateForServiceLog() {
+  const p = () => ({ before: "", after: "" });
+  return {
+    pool: {
+      tb: p(),
+      fc: p(),
+      ph: p(),
+      ta: p(),
+      poolTemp: p(),
+    },
+    spa: {
+      tb: p(),
+      fc: p(),
+      ph: p(),
+      ta: p(),
+      spaTemp: p(),
+    },
+    poolChem: { pucks: "", granulated: "", ta: "" },
+    spaChem: { pucks: "", granulated: "", ta: "" },
+  };
+}
+
+export function emptyServiceLogWorkPatch() {
+  return mapWorkStateToServiceLogPatch(emptyNestedWorkStateForServiceLog());
+}
+
+/**
+ * Flat diff of two reading/chemical patches — only keys whose values changed.
+ * @param {Record<string, string>} baseline
+ * @param {Record<string, string>} current
+ */
+export function diffServiceLogPatch(baseline, current) {
+  if (!current || typeof current !== "object") return {};
+  if (!baseline || typeof baseline !== "object") return { ...current };
+  const patch = {};
+  for (const k of Object.keys(current)) {
+    const b = baseline[k] ?? "";
+    const c = current[k] ?? "";
+    if (b !== c) patch[k] = current[k];
+  }
+  return patch;
+}
+
 const str = (v) => (v == null ? "" : String(v));
 
 /**
@@ -139,32 +183,51 @@ export function workStateFromServiceLogRow(row) {
  * @param {object} patch
  */
 export async function upsertServiceLog(propertyId, techSlug, patch) {
-  const payload = {
-    property_id: propertyId,
-    technician_slug: techSlug,
-    service_date: getTodayEasternDate(),
-    ...patch,
-  };
+  const serviceDate = getTodayEasternDate();
 
-  const onConflict = "property_id,service_date";
-  const chemicalUpsert = patchIncludesChemicalColumns(patch);
-  if (chemicalUpsert) {
-    console.log("chemical payload", payload);
+  const { data: existing, error: readError } = await supabase
+    .from("service_logs")
+    .select("*")
+    .eq("property_id", propertyId)
+    .eq("service_date", serviceDate)
+    .maybeSingle();
+
+  if (readError) {
+    console.error("service_logs pre-read failed", readError);
+    throw readError;
   }
 
+  const merged = {
+    ...(existing && typeof existing === "object" ? existing : {}),
+    ...patch,
+    property_id: propertyId,
+    technician_slug: techSlug,
+    service_date: serviceDate,
+  };
+
+  for (const k of Object.keys(merged)) {
+    if (merged[k] === undefined) delete merged[k];
+  }
+
+  const chemicalUpsert = patchIncludesChemicalColumns(patch);
+
   console.log("Supabase write about to run", {
-    property_id: payload.property_id,
-    service_date: payload.service_date,
-    onConflict,
+    property_id: merged.property_id,
+    service_date: merged.service_date,
+    onConflict: "property_id,service_date",
+    patchKeys: Object.keys(patch),
   });
 
-  const row = payload;
-  console.log("UPSERT ROW:", row);
+  if (chemicalUpsert) {
+    console.log("chemical payload keys", Object.keys(patch));
+  }
+
+  console.log("UPSERT merged row keys", Object.keys(merged).length);
 
   const { data, error } = await supabase
     .from("service_logs")
-    .upsert(payload, {
-      onConflict,
+    .upsert(merged, {
+      onConflict: "property_id,service_date",
     })
     .select()
     .maybeSingle();
