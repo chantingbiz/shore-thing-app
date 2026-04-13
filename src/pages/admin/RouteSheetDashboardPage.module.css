@@ -1,0 +1,869 @@
+/* Route sheet dashboard — matches admin glass cards (Today's Activity, etc.) */
+
+.toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.intro {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr min(18rem, 100%);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mainCol {
+  min-width: 0;
+}
+
+.panel {
+  padding: 1rem 1.1rem;
+  border-radius: 1.15rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.panel + .panel {
+  margin-top: 0.85rem;
+}
+
+.panelTitle {
+  margin: 0 0 0.85rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.75);
+}
+
+.workflowBlock {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.85rem;
+  border: 1.5px solid transparent;
+  transition:
+    opacity 0.2s ease,
+    filter 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.workflowBlock + .workflowBlock {
+  margin-top: 0.65rem;
+}
+
+.workflowLocked {
+  opacity: 0.48;
+  pointer-events: none;
+  filter: saturate(0.65);
+}
+
+.workflowFocus {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.25),
+    0 6px 20px rgba(0, 0, 0, 0.06);
+}
+
+.workflowDone {
+  opacity: 1;
+  filter: none;
+}
+
+.stepCue {
+  margin: 0 0 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.stepCuePulse {
+  animation: stepCueGlow 2.4s ease-in-out infinite;
+}
+
+@keyframes stepCueGlow {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow: 0 2px 5px rgba(255, 255, 255, 0.7);
+  }
+  50% {
+    opacity: 0.82;
+    text-shadow:
+      0 0 12px rgba(255, 255, 255, 0.95),
+      0 2px 6px rgba(255, 255, 255, 0.85);
+  }
+}
+
+.stepHelp {
+  margin: -0.2rem 0 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #000;
+  opacity: 0.78;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.55);
+}
+
+.dayChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.panelLocked {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: saturate(0.7);
+}
+
+.panelActive {
+  opacity: 1;
+  pointer-events: auto;
+  filter: none;
+  border-color: rgba(255, 255, 255, 0.48);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 8px 24px rgba(0, 0, 0, 0.07);
+}
+
+.asideIntro {
+  margin: -0.35rem 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #000;
+  opacity: 0.82;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.emptyPromptMuted {
+  opacity: 0.72;
+}
+
+.segmentRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.segmentRow:last-of-type {
+  margin-bottom: 0;
+}
+
+.segmentLabel {
+  width: 100%;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.65);
+  margin-bottom: 0.1rem;
+}
+
+.segmentBtn {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(0, 0, 0, 0.82);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.segmentBtn:hover {
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.segmentBtn:active {
+  transform: scale(0.98);
+}
+
+.segmentBtnActive {
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* Guided workflow — selected technician / day (strong blue) */
+.segmentBtn.workflowSelectActive {
+  color: rgba(255, 255, 255, 0.98);
+  font-weight: 700;
+  background: linear-gradient(180deg, rgba(48, 128, 228, 0.96) 0%, rgba(24, 92, 198, 0.99) 100%);
+  border-color: rgba(20, 78, 175, 0.65);
+  text-shadow: 0 1px 2px rgba(0, 30, 90, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 0 0 1px rgba(28, 95, 200, 0.45),
+    0 4px 14px rgba(24, 92, 198, 0.28);
+}
+
+.segmentBtn.workflowSelectActive:hover {
+  background: linear-gradient(180deg, rgba(58, 142, 238, 0.98) 0%, rgba(34, 105, 212, 1) 100%);
+  border-color: rgba(28, 95, 200, 0.75);
+}
+
+/* Step 3 sheet-type segment — same blue when selected */
+.cellSegBtn.workflowSelectActive {
+  color: rgba(255, 255, 255, 0.98);
+  font-weight: 800;
+  background: linear-gradient(180deg, rgba(48, 128, 228, 0.96) 0%, rgba(24, 92, 198, 0.99) 100%);
+  text-shadow: 0 1px 2px rgba(0, 30, 90, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 45, 120, 0.22),
+    0 0 0 1px rgba(28, 95, 200, 0.48);
+}
+
+.cellSegBtn.workflowSelectActive:hover {
+  background: linear-gradient(180deg, rgba(58, 142, 238, 0.98) 0%, rgba(34, 105, 212, 1) 100%);
+}
+
+.segmentBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sendZone {
+  margin-top: 0.35rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.sendBtn {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.65rem 1rem;
+  border-radius: 1.1rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(0, 0, 0, 0.88);
+  background: rgba(255, 255, 255, 0.42);
+  border: 1.5px solid rgba(255, 255, 255, 0.52);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+  cursor: pointer;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8);
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.sendBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.sendBtn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.sendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.sendHint {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #000;
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.65);
+  line-height: 1.4;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin: 0 -0.15rem;
+  border-radius: 0.65rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  text-align: left;
+  vertical-align: middle;
+  padding: 0.55rem 0.65rem;
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.55rem 0.65rem;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.55);
+}
+
+.table tbody tr {
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.12s ease;
+}
+
+.table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rowActive td {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rowMuted td {
+  background: rgba(0, 0, 0, 0.06);
+  opacity: 0.72;
+}
+
+.rowManual td {
+  background: rgba(255, 250, 220, 0.35);
+  opacity: 1;
+}
+
+tr.rowEdited td:first-child {
+  box-shadow: inset 3px 0 0 rgba(185, 140, 45, 0.55);
+}
+
+/* Excluded from outgoing sheet — whole row muted, controls stay usable */
+tr.rowExcluded td {
+  filter: saturate(0.52) brightness(0.93);
+  opacity: 0.78;
+}
+
+tr.rowExcluded.rowActive td,
+tr.rowExcluded.rowMuted td,
+tr.rowExcluded.rowManual td {
+  background: rgba(0, 0, 0, 0.07) !important;
+}
+
+.table tbody tr.rowExcluded:hover td {
+  filter: saturate(0.62) brightness(0.96);
+  opacity: 0.86;
+}
+
+.propName {
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.75);
+}
+
+.addr {
+  color: #000;
+  opacity: 0.85;
+  max-width: 16rem;
+  line-height: 1.35;
+}
+
+.comments {
+  max-width: 18rem;
+  min-width: 10rem;
+  line-height: 1.35;
+  opacity: 0.92;
+}
+
+.commentsTextarea {
+  display: block;
+  width: 100%;
+  min-width: 8rem;
+  max-width: 18rem;
+  min-height: 2.35rem;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #000;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  border-radius: 0.55rem;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.commentsTextarea::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.commentsTextarea:hover {
+  background: rgba(255, 255, 255, 0.38);
+  border-color: rgba(255, 255, 255, 0.52);
+}
+
+.commentsTextarea:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.48);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.cellSeg {
+  display: inline-flex;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.cellSegBtn {
+  margin: 0;
+  padding: 0.32rem 0.55rem;
+  min-width: 3rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.1s ease;
+}
+
+.cellSegBtn:last-child {
+  border-right: none;
+}
+
+.cellSegBtn:active {
+  transform: scale(0.98);
+}
+
+/* Inactive segment: readable but clearly not selected */
+.cellSegBtnOff {
+  color: rgba(0, 0, 0, 0.38);
+  background: rgba(255, 255, 255, 0.14);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2);
+}
+
+.cellSegBtnOff:hover {
+  color: rgba(0, 0, 0, 0.55);
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* Guest — saturated active */
+.cellSegBtnGuestOn {
+  color: rgba(255, 255, 255, 0.98);
+  background: linear-gradient(180deg, rgba(45, 145, 205, 0.95) 0%, rgba(22, 105, 165, 0.98) 100%);
+  text-shadow: 0 1px 2px rgba(0, 40, 80, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 40, 90, 0.25),
+    0 0 0 1px rgba(12, 80, 130, 0.5);
+}
+
+.cellSegBtnGuestOn:hover {
+  background: linear-gradient(180deg, rgba(55, 158, 218, 0.98) 0%, rgba(28, 118, 178, 1) 100%);
+}
+
+/* Check — gold/yellow active (readable on warm pill) */
+.cellSegBtnCheckOn {
+  color: rgba(48, 36, 6, 0.96);
+  background: linear-gradient(180deg, rgba(255, 224, 130, 0.98) 0%, rgba(218, 165, 45, 0.98) 100%);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(120, 80, 10, 0.22),
+    0 0 0 1px rgba(160, 110, 20, 0.45);
+}
+
+.cellSegBtnCheckOn:hover {
+  background: linear-gradient(180deg, rgba(255, 232, 150, 1) 0%, rgba(228, 178, 58, 1) 100%);
+}
+
+/* Yes — green active */
+.cellSegBtnHeatYesOn {
+  color: rgba(255, 255, 255, 0.98);
+  background: linear-gradient(180deg, rgba(38, 145, 95, 0.95) 0%, rgba(18, 105, 68, 0.98) 100%);
+  text-shadow: 0 1px 2px rgba(0, 50, 30, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 45, 25, 0.25),
+    0 0 0 1px rgba(15, 95, 60, 0.5);
+}
+
+.cellSegBtnHeatYesOn:hover {
+  background: linear-gradient(180deg, rgba(48, 162, 108, 0.98) 0%, rgba(24, 118, 78, 1) 100%);
+}
+
+/* No — red active (polished, not harsh) */
+.cellSegBtnHeatNoOn {
+  color: rgba(255, 255, 255, 0.98);
+  background: linear-gradient(180deg, rgba(210, 88, 88, 0.96) 0%, rgba(165, 48, 52, 0.98) 100%);
+  text-shadow: 0 1px 2px rgba(80, 15, 20, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(90, 20, 25, 0.28),
+    0 0 0 1px rgba(130, 40, 45, 0.5);
+}
+
+.cellSegBtnHeatNoOn:hover {
+  background: linear-gradient(180deg, rgba(220, 100, 100, 0.98) 0%, rgba(178, 58, 62, 1) 100%);
+}
+
+/* Step 3 — route sheet type (Turnover vs Midweek) */
+.sheetTypeRow {
+  margin-bottom: 0.75rem;
+}
+
+.sheetTypeRow .segmentLabel {
+  margin-bottom: 0.35rem;
+}
+
+.dash {
+  opacity: 0.45;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.22rem 0.5rem;
+  border-radius: 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.badgeGuest {
+  color: rgba(10, 62, 92, 0.96);
+  background: rgba(120, 210, 245, 0.52);
+}
+
+.badgeCheck {
+  color: rgba(0, 0, 0, 0.75);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.heatYes {
+  font-weight: 800;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(15, 80, 55, 0.98);
+  background: rgba(160, 240, 200, 0.58);
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.heatNo {
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #000;
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.6);
+}
+
+.toggle input {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: #0d6efd;
+}
+
+.emptyPrompt {
+  margin: 0;
+  padding: 1.25rem 0.5rem;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+}
+
+.statusList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+}
+
+.statusRowBtn {
+  width: 100%;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.statusRowBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.48);
+}
+
+.statusRowBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.statusRowActive {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.statusRowActive:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.queueEmpty {
+  margin: 0;
+  width: 100%;
+  padding: 0.35rem 0.15rem 0.15rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.statusLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.65);
+  line-height: 1.3;
+}
+
+.pill {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.pillSent {
+  color: rgba(15, 80, 55, 0.98);
+  background: rgba(160, 240, 200, 0.58);
+}
+
+.pillPending {
+  color: rgba(0, 0, 0, 0.78);
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.futureHint {
+  margin: 0.85rem 0 0;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #000;
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 0.55rem;
+  border: 1px dashed rgba(255, 255, 255, 0.4);
+  line-height: 1.4;
+}
+
+.futureHint code {
+  font-size: 0.68rem;
+}
+
+.asideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.archiveIntro {
+  margin: -0.35rem 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #000;
+  opacity: 0.88;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+
+.archivePreviewList {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0;
+  max-height: 9rem;
+  overflow-y: auto;
+}
+
+.archivePreviewRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.32rem 0.4rem;
+  margin-bottom: 0.28rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.archivePreviewLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+  line-height: 1.25;
+}
+
+.archiveEmpty {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #000;
+  opacity: 0.72;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.55);
+}
+
+.archiveActionBtn {
+  width: 100%;
+  margin: 0;
+  min-height: 2.85rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.97);
+  cursor: pointer;
+  border: 1px solid rgba(28, 95, 200, 0.55);
+  background: linear-gradient(180deg, rgba(48, 128, 228, 0.92) 0%, rgba(24, 92, 198, 0.98) 100%);
+  text-shadow: 0 1px 2px rgba(0, 30, 90, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 4px 14px rgba(24, 92, 198, 0.22);
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.12s ease;
+}
+
+.archiveActionBtn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(58, 142, 238, 0.95) 0%, rgba(34, 105, 212, 1) 100%);
+}
+
+.archiveActionBtn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.archiveActionBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.archiveStatusOk,
+.archiveStatusErr {
+  margin: 0.55rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #000;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.55);
+}
+
+.archiveStatusErr {
+  color: rgba(120, 25, 25, 0.95);
+}

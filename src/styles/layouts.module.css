@@ -43,6 +43,10 @@
   margin-inline: auto;
 }
 
+.subpageShellWide {
+  max-width: min(72rem, 100%);
+}
+
 .subpageHeader {
   position: relative;
   z-index: 1;

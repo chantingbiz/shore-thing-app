@@ -3,17 +3,15 @@ import PoolVideoBackground from "./components/PoolVideoBackground.jsx";
 import appStyles from "./App.module.css";
 import LandingPage from "./pages/LandingPage.jsx";
 import TechniciansPage from "./pages/TechniciansPage.jsx";
-import TechnicianDetailPage from "./pages/TechnicianDetailPage.jsx";
-import StephenPropertiesPage from "./pages/stephen/StephenPropertiesPage.jsx";
+import TechnicianRouteTypeChooser from "./pages/technician/TechnicianRouteTypeChooser.jsx";
+import TechnicianRoutePropertiesPage from "./pages/technician/TechnicianRoutePropertiesPage.jsx";
 import StephenPropertyDetailPage from "./pages/stephen/StephenPropertyDetailPage.jsx";
 import AdministratorPage from "./pages/AdministratorPage.jsx";
 import AdminActivityPage from "./pages/admin/AdminActivityPage.jsx";
 import AdminActivityDetailPage from "./pages/admin/AdminActivityDetailPage.jsx";
 import AdminActivityPropertyPage from "./pages/admin/AdminActivityPropertyPage.jsx";
-import AdminRoutesPage from "./pages/admin/AdminRoutesPage.jsx";
-import AdminStephenRoutesPage from "./pages/admin/AdminStephenRoutesPage.jsx";
-import AdminRoutesPlaceholderPage from "./pages/admin/AdminRoutesPlaceholderPage.jsx";
 import AdminServiceHistoryPage from "./pages/admin/AdminServiceHistoryPage.jsx";
+import RouteSheetDashboardPage from "./pages/admin/RouteSheetDashboardPage.jsx";
 
 export default function App() {
   return (
@@ -23,9 +21,24 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/technicians" element={<TechniciansPage />} />
-          <Route path="/technician/stephen" element={<StephenPropertiesPage />} />
+          <Route
+            path="/technician/:slug/turnover/:propertySlug"
+            element={<StephenPropertyDetailPage />}
+          />
+          <Route
+            path="/technician/:slug/midweek/:propertySlug"
+            element={<StephenPropertyDetailPage />}
+          />
+          <Route
+            path="/technician/:slug/turnover"
+            element={<TechnicianRoutePropertiesPage routeType="turnover" />}
+          />
+          <Route
+            path="/technician/:slug/midweek"
+            element={<TechnicianRoutePropertiesPage routeType="midweek" />}
+          />
           <Route path="/technician/:slug/:propertySlug" element={<StephenPropertyDetailPage />} />
-          <Route path="/technician/:slug" element={<TechnicianDetailPage />} />
+          <Route path="/technician/:slug" element={<TechnicianRouteTypeChooser />} />
 
           <Route
             path="/administrator/activity/:techSlug/:propertySlug"
@@ -42,14 +55,9 @@ export default function App() {
           />
 
           <Route
-            path="/administrator/routes/stephen"
-            element={<AdminStephenRoutesPage />}
+            path="/administrator/route-sheet-dashboard"
+            element={<RouteSheetDashboardPage />}
           />
-          <Route
-            path="/administrator/routes/:techSlug"
-            element={<AdminRoutesPlaceholderPage />}
-          />
-          <Route path="/administrator/routes" element={<AdminRoutesPage />} />
 
           <Route path="/administrator" element={<AdministratorPage />} />
         </Routes>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 import { getStephenPropertyBySlug } from "../../data/stephenProperties.js";
 import { getTechnicianBySlug } from "../../data/technicians.js";
 import {
@@ -26,12 +26,18 @@ import {
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import { getLocalDayKey } from "../../utils/localDay.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
+import {
+  getRouteTypeFromTechnicianPath,
+  technicianRouteListPath,
+} from "../../utils/technicianRoutePaths.js";
 import styles from "./StephenPropertyDetailPage.module.css";
 
 export default function StephenPropertyDetailPage() {
+  const location = useLocation();
   const { slug: slugParam, propertySlug } = useParams();
   const technicianSlug = (slugParam ?? "").toLowerCase();
   const technician = getTechnicianBySlug(technicianSlug);
+  const selectedRouteType = getRouteTypeFromTechnicianPath(location.pathname);
 
   const staticProp =
     technicianSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
@@ -48,8 +54,9 @@ export default function StephenPropertyDetailPage() {
         }
       : null);
 
-  const listPath =
-    technicianSlug === "stephen" ? "/technician/stephen" : `/technician/${technicianSlug}`;
+  const listPath = selectedRouteType
+    ? technicianRouteListPath(technicianSlug, selectedRouteType)
+    : `/technician/${technicianSlug}`;
 
   useSupabaseSyncTick();
 

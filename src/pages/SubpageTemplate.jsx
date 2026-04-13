@@ -7,6 +7,8 @@ export default function SubpageTemplate({
   backTo,
   children,
   readableDarkText = false,
+  /** Wider max-width for desktop admin tools (e.g. route sheet dashboard). */
+  wideLayout = false,
 }) {
   const titleClass = readableDarkText
     ? `${layout.title} ${layout.titleReadableDark}`
@@ -15,8 +17,12 @@ export default function SubpageTemplate({
     ? `${layout.subtitle} ${layout.subtitleReadableDark}`
     : layout.subtitle;
 
+  const shellClass = wideLayout
+    ? `${layout.subpageShell} ${layout.subpageShellWide}`
+    : layout.subpageShell;
+
   return (
-    <div className={layout.subpageShell}>
+    <div className={shellClass}>
       <div className={layout.ambient} aria-hidden />
       <header className={layout.subpageHeader}>
         <Link to={backTo} className={layout.back}>

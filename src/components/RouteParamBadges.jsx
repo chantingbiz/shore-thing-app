@@ -2,7 +2,7 @@ import { getGuestCheckLabel, getPoolHeatLabel } from "../utils/adminRouteStorage
 import styles from "./RouteParamBadges.module.css";
 
 /**
- * Read-only route parameters from admin Adjust Routes (localStorage).
+ * Read-only route parameters from admin route settings (localStorage).
  * @param {{ propertySlug: string, className?: string }} props
  */
 export default function RouteParamBadges({ propertySlug, className }) {

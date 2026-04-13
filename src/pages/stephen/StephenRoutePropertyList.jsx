@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import RouteSheetUploadPanel from "../../components/RouteSheetUploadPanel.jsx";
 import { getPropertiesForTechnician } from "../../lib/api.js";
+import { getMockRouteSlugsForType } from "../../data/technicianRouteSheetsMock.js";
 import { mergeStephenRouteListWithDb } from "../../utils/mergeTechnicianRouteList.js";
 import {
   elapsedSecondsSince,
@@ -15,7 +15,7 @@ import {
   setPropertyCompletedForDay,
 } from "../../utils/propertyCompletion.js";
 import { sortPropertiesForTechnicianList } from "../../utils/technicianPropertyOrder.js";
-import PropertyInlineNameEdit from "../../components/PropertyInlineNameEdit.jsx";
+import { technicianPropertyDetailPath } from "../../utils/technicianRoutePaths.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
 import {
@@ -32,11 +32,22 @@ import styles from "./StephenPropertiesPage.module.css";
 
 const TECH_SLUG = "stephen";
 
-export default function StephenPropertiesPage() {
+/**
+ * Stephen property list for a single route sheet context (Turnover or Midweek).
+ * filteredSlugs: mock stand-in for the future Supabase-backed list for that sheet only.
+ *
+ * @param {{ routeType: import('../../data/technicianRouteSheetsMock.js').TechnicianRouteType }} props
+ */
+export default function StephenRoutePropertyList({ routeType }) {
   useSupabaseSyncTick();
   const [now, setNow] = useState(() => Date.now());
   const [refreshTick, setRefreshTick] = useState(0);
   const [dbProps, setDbProps] = useState([]);
+
+  const allowedSlugs = useMemo(
+    () => new Set(getMockRouteSlugsForType(TECH_SLUG, routeType)),
+    [routeType]
+  );
 
   const loadDbProps = useCallback(async () => {
     try {
@@ -59,20 +70,25 @@ export default function StephenPropertiesPage() {
 
   const displayList = useMemo(() => mergeStephenRouteListWithDb(dbProps), [dbProps]);
 
+  const routeFiltered = useMemo(
+    () => displayList.filter((p) => allowedSlugs.has(p.slug)),
+    [displayList, allowedSlugs]
+  );
+
   useEffect(() => {
-    const slugs = displayList.map((p) => p.slug);
+    const slugs = routeFiltered.map((p) => p.slug);
     primePropertiesBySlug(slugs);
     primeTechnicianToday(TECH_SLUG, []);
     void ensurePropertiesBySlug(slugs).then(() => {
       const ids = slugs.map((s) => resolveDbPropertyId(s)).filter(Boolean);
       if (ids.length) void ensureRouteSettings(ids);
     });
-  }, [displayList]);
+  }, [routeFiltered]);
 
   const sorted = useMemo(() => {
     void refreshTick;
-    return sortPropertiesForTechnicianList(displayList, TECH_SLUG);
-  }, [displayList, refreshTick]);
+    return sortPropertiesForTechnicianList(routeFiltered, TECH_SLUG);
+  }, [routeFiltered, refreshTick]);
 
   const handleRefresh = useCallback(() => {
     setRefreshTick((n) => n + 1);
@@ -96,34 +112,26 @@ export default function StephenPropertiesPage() {
     setRefreshTick((n) => n + 1);
   }, []);
 
+  const titleSuffix = routeType === "turnover" ? "Turnover" : "Midweek";
+
   return (
-    <SubpageTemplate title="Stephen" backTo="/technicians">
+    <SubpageTemplate
+      title={`Stephen · ${titleSuffix}`}
+      backTo={`/technician/${TECH_SLUG}`}
+      readableDarkText
+    >
       <div className={styles.toolbar}>
         <p className={styles.intro}>Select a property</p>
-        <button
-          type="button"
-          className={styles.refreshBtn}
-          onClick={handleRefresh}
-        >
+        <button type="button" className={styles.refreshBtn} onClick={handleRefresh}>
           Refresh
         </button>
       </div>
-      <RouteSheetUploadPanel
-        technicianSlug={TECH_SLUG}
-        routeCountHint={displayList.length}
-        onApplied={() => {
-          void loadDbProps();
-          setRefreshTick((n) => n + 1);
-        }}
-      />
-      <nav className={styles.list} aria-label="Stephen properties">
+      <nav className={styles.list} aria-label={`Stephen ${titleSuffix} properties`}>
         {sorted.map((p) => {
           const poolTs = getPoolStart(TECH_SLUG, p.slug);
           const spaTs = getSpaStart(TECH_SLUG, p.slug);
-          const poolSec =
-            poolTs != null ? elapsedSecondsSince(poolTs, now) : null;
-          const spaSec =
-            spaTs != null ? elapsedSecondsSince(spaTs, now) : null;
+          const poolSec = poolTs != null ? elapsedSecondsSince(poolTs, now) : null;
+          const spaSec = spaTs != null ? elapsedSecondsSince(spaTs, now) : null;
           const hasActive = poolSec != null || spaSec != null;
           const completed = isPropertyCompletedToday(TECH_SLUG, p.slug);
 
@@ -133,7 +141,7 @@ export default function StephenPropertiesPage() {
               className={`${styles.cardShell} ${completed ? styles.cardShellCompleted : ""}`}
             >
               <Link
-                to={`/technician/stephen/${p.slug}`}
+                to={technicianPropertyDetailPath(TECH_SLUG, routeType, p.slug)}
                 className={styles.cardHitArea}
                 aria-label={`Open ${p.name}`}
               />
@@ -141,11 +149,6 @@ export default function StephenPropertiesPage() {
                 <div className={styles.cardTop}>
                   <div className={styles.cardNameRow}>
                     <span className={styles.cardName}>{p.name}</span>
-                    <PropertyInlineNameEdit
-                      propertyId={p.id}
-                      name={p.name}
-                      onUpdated={() => void loadDbProps()}
-                    />
                   </div>
                   <div className={styles.cardTopRight}>
                     {hasActive ? (
@@ -163,18 +166,13 @@ export default function StephenPropertiesPage() {
                       }
                       onClick={(e) => toggleCompleted(p, e)}
                     >
-                      <span
-                        className={`${glass.btnLabel} ${styles.jobGlassBtnLabel}`}
-                      >
+                      <span className={`${glass.btnLabel} ${styles.jobGlassBtnLabel}`}>
                         {completed ? "Reopen Job" : "Finish Job"}
                       </span>
                     </button>
                   </div>
                 </div>
-                <RouteParamBadges
-                  propertySlug={p.slug}
-                  className={styles.routeBadges}
-                />
+                <RouteParamBadges propertySlug={p.slug} className={styles.routeBadges} />
                 <span className={styles.cardAddress}>{p.address}</span>
                 <p className={styles.statusLine} role="status">
                   <span
@@ -192,17 +190,13 @@ export default function StephenPropertiesPage() {
                     {poolSec != null ? (
                       <div className={styles.timerPill}>
                         <span className={styles.timerPillLabel}>Pool</span>
-                        <span className={styles.timerPillValue}>
-                          {formatHoseElapsed(poolSec)}
-                        </span>
+                        <span className={styles.timerPillValue}>{formatHoseElapsed(poolSec)}</span>
                       </div>
                     ) : null}
                     {spaSec != null ? (
                       <div className={styles.timerPill}>
                         <span className={styles.timerPillLabel}>Spa</span>
-                        <span className={styles.timerPillValue}>
-                          {formatHoseElapsed(spaSec)}
-                        </span>
+                        <span className={styles.timerPillValue}>{formatHoseElapsed(spaSec)}</span>
                       </div>
                     ) : null}
                   </div>
