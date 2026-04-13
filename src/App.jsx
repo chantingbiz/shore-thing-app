@@ -11,6 +11,7 @@ import AdminActivityPage from "./pages/admin/AdminActivityPage.jsx";
 import AdminActivityDetailPage from "./pages/admin/AdminActivityDetailPage.jsx";
 import AdminActivityPropertyPage from "./pages/admin/AdminActivityPropertyPage.jsx";
 import AdminServiceHistoryPage from "./pages/admin/AdminServiceHistoryPage.jsx";
+import PropertyIncidentReportPage from "./pages/admin/PropertyIncidentReportPage.jsx";
 import RouteSheetDashboardPage from "./pages/admin/RouteSheetDashboardPage.jsx";
 
 export default function App() {
@@ -57,6 +58,10 @@ export default function App() {
           <Route
             path="/administrator/route-sheet-dashboard"
             element={<RouteSheetDashboardPage />}
+          />
+          <Route
+            path="/administrator/incident-report"
+            element={<PropertyIncidentReportPage />}
           />
 
           <Route path="/administrator" element={<AdministratorPage />} />

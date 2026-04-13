@@ -33,6 +33,20 @@ function IconRoutes() {
   );
 }
 
+function IconIncident() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 7v6M12 17h.01M10.3 3h3.4l7 12-3.4 6H6.7l-3.4-6 7-12z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function IconHistory() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -106,6 +120,15 @@ export default function AdminHomePage() {
                   <IconRoutes />
                 </span>
                 <span className={glass.btnLabel}>Route sheet dashboard</span>
+              </Link>
+              <Link
+                to="/administrator/incident-report"
+                className={`${glass.glassBtn} ${glass.glassBtnFull} ${homeStyles.navLink}`}
+              >
+                <span className={homeStyles.navIcon}>
+                  <IconIncident />
+                </span>
+                <span className={glass.btnLabel}>Property incident report</span>
               </Link>
             </div>
           </section>

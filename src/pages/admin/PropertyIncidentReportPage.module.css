@@ -1,0 +1,399 @@
+.toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.intro {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #000;
+  text-shadow: 0 2px 5px rgba(255, 255, 255, 0.7);
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: flex-end;
+}
+
+.lab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.75);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.55);
+}
+
+.labGrow {
+  composes: lab;
+  flex: 1;
+  min-width: 12rem;
+}
+
+.dateIn,
+.searchIn {
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.35);
+  font-size: 0.875rem;
+  color: #000;
+}
+
+.searchBtn {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.82);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+}
+
+.searchBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.toggle {
+  display: inline-flex;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.toggleBtn {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.75);
+  cursor: pointer;
+}
+
+.toggleBtnActive {
+  background: rgba(255, 255, 255, 0.45);
+  color: #000;
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.resultBtn {
+  text-align: left;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.8125rem;
+  color: #000;
+  cursor: pointer;
+}
+
+.resultBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.resultBtnSelected {
+  border-color: rgba(0, 80, 120, 0.45);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.selectedPill {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.err {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #7a1e1e;
+}
+
+.reportPaper {
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 1rem 1rem 1.15rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  color: #111;
+}
+
+/* Inside report card: prioritize readable dark text over subtle grays */
+.reportPaper .meta {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #141414;
+}
+
+.reportPaper .meta strong {
+  color: #000;
+  font-weight: 800;
+}
+
+.reportTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: 0.02em;
+}
+
+.section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #111;
+}
+
+.meta {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.reportPaper .sectionTitle {
+  color: #000;
+}
+
+.reportPaper .sourceTag {
+  display: inline-block;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(0, 70, 100, 0.14);
+  color: #021820;
+}
+
+.sourceTag {
+  display: inline-block;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(0, 80, 120, 0.12);
+  color: #064a6e;
+}
+
+.photoRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.5rem 0;
+}
+
+.photoWrap {
+  flex: 1;
+  min-width: 8rem;
+  max-width: 14rem;
+}
+
+.photoLab {
+  margin: 0 0 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.reportPaper .photoLab {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #1a1a1a;
+}
+
+.photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.photoEmpty {
+  margin: 0;
+  padding: 1.25rem 0.5rem;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.45);
+  border-radius: 0.5rem;
+  border: 1px dashed rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.reportPaper .photoEmpty {
+  color: #333;
+  font-weight: 700;
+}
+
+.readings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin: 0.35rem 0 0;
+}
+
+.readings th,
+.readings td {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.28rem 0.4rem;
+  text-align: left;
+}
+
+.readings th {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 700;
+}
+
+.reportPaper .readings {
+  font-size: 0.875rem;
+  margin-top: 0.45rem;
+}
+
+.reportPaper .readings th,
+.reportPaper .readings td {
+  color: #0a0a0a;
+  border-color: rgba(0, 0, 0, 0.18);
+  padding: 0.35rem 0.45rem;
+}
+
+.reportPaper .readings th {
+  color: #000;
+  background: rgba(0, 0, 0, 0.08);
+  font-weight: 800;
+}
+
+.muted {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.reportPaper .muted {
+  color: #2a2a2a;
+  font-weight: 700;
+  font-size: 0.8125rem;
+}
+
+.chemList {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #222;
+}
+
+.reportPaper .chemList {
+  color: #0a0a0a;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.noteArea {
+  width: 100%;
+  min-height: 5rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.reportPaper .noteArea {
+  color: #111;
+  background: #fff;
+}
+
+.noteHint {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.reportPaper .noteHint {
+  color: #444;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.reportPaper .lab {
+  color: #141414;
+  text-shadow: none;
+  font-weight: 800;
+}
+
+.loading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.placeholderNote {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 500;
+}

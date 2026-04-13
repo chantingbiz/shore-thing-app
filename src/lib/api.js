@@ -10,7 +10,7 @@ export { getTodayEasternDate } from "./easternDate.js";
 export const SERVICE_PHOTOS_BUCKET = "pool-photos";
 
 const SERVICE_LOG_SELECT_BASE =
-  "id,property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
+  "id,property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
 
 /** `service_logs` columns for Chemicals Added (not TA readings before/after). */
 export const SERVICE_LOG_CHEMICAL_COLUMNS = [
@@ -66,6 +66,7 @@ export function mapReadingsWorkStateToServiceLogPatch(state) {
     pool_ta_after: pool.ta?.after ?? "",
     pool_temp_before: pool.poolTemp?.before ?? "",
     pool_temp_set: pool.poolTemp?.after ?? "",
+    pool_temp_after: pool.poolTemp?.after ?? "",
 
     spa_tb_before: spa.tb?.before ?? "",
     spa_tb_after: spa.tb?.after ?? "",
@@ -77,6 +78,7 @@ export function mapReadingsWorkStateToServiceLogPatch(state) {
     spa_ta_after: spa.ta?.after ?? "",
     spa_temp_before: spa.spaTemp?.before ?? "",
     spa_temp: spa.spaTemp?.after ?? "",
+    spa_temp_after: spa.spaTemp?.after ?? "",
   };
 }
 
@@ -137,6 +139,19 @@ export function diffServiceLogPatch(baseline, current) {
 
 const str = (v) => (v == null ? "" : String(v));
 
+/** Prefer canonical `*_temp_after`; fall back to legacy `pool_temp_set` / `spa_temp` on old rows. */
+export function poolTempAfterFromRow(row) {
+  if (!row || typeof row !== "object") return "";
+  const v = row.pool_temp_after ?? row.pool_temp_set;
+  return str(v);
+}
+
+export function spaTempAfterFromRow(row) {
+  if (!row || typeof row !== "object") return "";
+  const v = row.spa_temp_after ?? row.spa_temp;
+  return str(v);
+}
+
 /**
  * Inverse of mapWorkStateToServiceLogPatch for hydrating ReadingsForm from a service_logs row.
  * @param {Record<string, unknown> | null | undefined} row
@@ -151,7 +166,7 @@ export function workStateFromServiceLogRow(row) {
       ta: { before: str(row.pool_ta_before), after: str(row.pool_ta_after) },
       poolTemp: {
         before: str(row.pool_temp_before),
-        after: str(row.pool_temp_set),
+        after: poolTempAfterFromRow(row),
       },
     },
     spa: {
@@ -161,7 +176,7 @@ export function workStateFromServiceLogRow(row) {
       ta: { before: str(row.spa_ta_before), after: str(row.spa_ta_after) },
       spaTemp: {
         before: str(row.spa_temp_before),
-        after: str(row.spa_temp),
+        after: spaTempAfterFromRow(row),
       },
     },
     poolChem: {
@@ -491,7 +506,16 @@ export async function archiveCompletedServiceLogs(serviceDate) {
   const { data, error } = await supabase.rpc("archive_completed_service_logs", {
     p_service_date: serviceDate,
   });
-  if (error) throw error;
+  if (error) {
+    console.error("archive_completed_service_logs RPC failed", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      raw: error,
+    });
+    throw error;
+  }
   return data;
 }
 
@@ -502,7 +526,7 @@ export async function getServiceHistoryRows(opts = {}) {
   const limit = Math.min(Math.max(opts.limit ?? 300, 1), 500);
   let q = supabase
     .from("service_history")
-    .select(SERVICE_LOG_SELECT_BASE + ",activity_snapshot")
+    .select("*")
     .order("service_date", { ascending: false })
     .limit(limit);
   if (opts.startDate) q = q.gte("service_date", opts.startDate);
@@ -510,5 +534,66 @@ export async function getServiceHistoryRows(opts = {}) {
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
+}
+
+/** Escape `%` / `_` for PostgREST `ilike` patterns. */
+function escapeIlikePattern(text) {
+  return text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/**
+ * Search properties by name, address, or slug (admin incident report / lookup).
+ * Uses parallel ilike queries and merges by id (avoids fragile `.or()` pattern strings).
+ * @param {string} searchText
+ * @param {number} [limit]
+ */
+export async function searchPropertiesForAdmin(searchText, limit = 40) {
+  const raw = (searchText ?? "").trim().replace(/,/g, " ");
+  if (!raw) return [];
+  const pattern = `%${escapeIlikePattern(raw)}%`;
+  const cap = Math.min(Math.max(limit, 1), 100);
+  const sel = "id,property_slug,name,address,technician_slug";
+  const [byName, bySlug, byAddr] = await Promise.all([
+    supabase.from("properties").select(sel).ilike("name", pattern).order("name", { ascending: true }).limit(cap),
+    supabase.from("properties").select(sel).ilike("property_slug", pattern).order("name", { ascending: true }).limit(cap),
+    supabase.from("properties").select(sel).ilike("address", pattern).order("name", { ascending: true }).limit(cap),
+  ]);
+  if (byName.error) throw byName.error;
+  if (bySlug.error) throw bySlug.error;
+  if (byAddr.error) throw byAddr.error;
+  const byId = new Map();
+  for (const row of [...(byName.data ?? []), ...(bySlug.data ?? []), ...(byAddr.data ?? [])]) {
+    byId.set(row.id, row);
+  }
+  return Array.from(byId.values())
+    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), undefined, { sensitivity: "base" }))
+    .slice(0, cap);
+}
+
+/**
+ * One service row for a property + Eastern calendar date: prefer live `service_logs`, else `service_history`.
+ * @param {string} propertyId uuid
+ * @param {string} serviceDate YYYY-MM-DD
+ * @returns {Promise<{ row: Record<string, unknown> | null, source: 'service_logs' | 'service_history' | null }>}
+ */
+export async function getServiceRecordForPropertyDate(propertyId, serviceDate) {
+  if (!propertyId || !serviceDate) return { row: null, source: null };
+  const { data: log, error: errLog } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("property_id", propertyId)
+    .eq("service_date", serviceDate)
+    .maybeSingle();
+  if (errLog) throw errLog;
+  if (log) return { row: log, source: "service_logs" };
+  const { data: hist, error: errHist } = await supabase
+    .from("service_history")
+    .select("*")
+    .eq("property_id", propertyId)
+    .eq("service_date", serviceDate)
+    .maybeSingle();
+  if (errHist) throw errHist;
+  if (hist) return { row: hist, source: "service_history" };
+  return { row: null, source: null };
 }
 

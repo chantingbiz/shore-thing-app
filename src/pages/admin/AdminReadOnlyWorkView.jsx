@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { poolTempAfterFromRow, spaTempAfterFromRow } from "../../lib/api.js";
 import { formatHoseElapsed, getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
 import styles from "./AdminReadOnlyWorkView.module.css";
 
@@ -68,7 +69,7 @@ export default function AdminReadOnlyWorkView({
     ta: { before: serviceLog?.pool_ta_before, after: serviceLog?.pool_ta_after },
     poolTemp: {
       before: serviceLog?.pool_temp_before,
-      after: serviceLog?.pool_temp_set,
+      after: poolTempAfterFromRow(serviceLog),
     },
   };
   const spa = {
@@ -78,7 +79,7 @@ export default function AdminReadOnlyWorkView({
     ta: { before: serviceLog?.spa_ta_before, after: serviceLog?.spa_ta_after },
     spaTemp: {
       before: serviceLog?.spa_temp_before,
-      after: serviceLog?.spa_temp,
+      after: spaTempAfterFromRow(serviceLog),
     },
   };
   const poolChem = {

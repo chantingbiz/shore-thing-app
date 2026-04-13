@@ -13,7 +13,20 @@ function daysAgoEastern(days) {
 }
 
 function activityCount(snapshot) {
-  return Array.isArray(snapshot) ? snapshot.length : 0;
+  if (Array.isArray(snapshot)) return snapshot.length;
+  if (snapshot && typeof snapshot === "object") {
+    if (Array.isArray(snapshot.events)) return snapshot.events.length;
+    if (typeof snapshot.length === "number" && Number.isFinite(snapshot.length)) return snapshot.length;
+  }
+  return 0;
+}
+
+function activitySnapshotJson(snapshot) {
+  try {
+    return JSON.stringify(snapshot ?? [], null, 2);
+  } catch {
+    return String(snapshot);
+  }
 }
 
 export default function AdminServiceHistoryPage() {
@@ -33,8 +46,14 @@ export default function AdminServiceHistoryPage() {
       const ids = [...new Set(data.map((r) => r.property_id).filter(Boolean))];
       await ensurePropertiesById(ids);
     } catch (e) {
-      console.error(e);
-      setError("Could not load service_history. Run the SQL migration and check RLS/policies.");
+      console.error("service_history load failed", {
+        message: e?.message,
+        code: e?.code,
+        details: e?.details,
+        hint: e?.hint,
+        raw: e,
+      });
+      setError("Could not load archived history. Check the browser console for details.");
       setRows([]);
     } finally {
       setLoading(false);
@@ -53,7 +72,13 @@ export default function AdminServiceHistoryPage() {
       const slug = (prop?.property_slug || "").toLowerCase();
       const name = (prop?.name || "").toLowerCase();
       const addr = (prop?.address || "").toLowerCase();
-      return slug.includes(q) || name.includes(q) || addr.includes(q);
+      const archivedName = (r.property_name || "").toLowerCase();
+      return (
+        slug.includes(q) ||
+        name.includes(q) ||
+        addr.includes(q) ||
+        archivedName.includes(q)
+      );
     });
   }, [rows, query]);
 
@@ -104,7 +129,7 @@ export default function AdminServiceHistoryPage() {
       <ul className={histStyles.list}>
         {filtered.map((row) => {
           const prop = getPropertyById(row.property_id);
-          const title = prop?.name || row.property_id;
+          const title = prop?.name || row.property_name || row.property_id;
           const sub = [prop?.property_slug, prop?.address].filter(Boolean).join(" · ");
           const photos = [
             row.pool_before_photo_url,
@@ -137,14 +162,14 @@ export default function AdminServiceHistoryPage() {
               ) : null}
               <details className={histStyles.details}>
                 <summary>Activity snapshot (JSON)</summary>
-                <pre className={histStyles.pre}>{JSON.stringify(row.activity_snapshot ?? [], null, 2)}</pre>
+                <pre className={histStyles.pre}>{activitySnapshotJson(row.activity_snapshot)}</pre>
               </details>
             </li>
           );
         })}
       </ul>
 
-      {!loading && !filtered.length ? (
+      {!loading && !error && !filtered.length ? (
         <p className={styles.placeholderNote}>No archived rows in this range{query.trim() ? " (try clearing the property filter)" : ""}.</p>
       ) : null}
 
