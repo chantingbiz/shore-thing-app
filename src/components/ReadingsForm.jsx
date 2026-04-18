@@ -14,6 +14,31 @@ const emptyChem = () => ({
   ta: "",
 });
 
+const emptyPoolChem = () => ({
+  ...emptyChem(),
+  clarifier: "",
+});
+
+/** Default amount when pool clarifier is added (stored in `service_logs.pool_clarifier`). */
+const POOL_CLARIFIER_DEFAULT = ".25";
+
+/** TB / FC / pH / TA only — Temp is never autofilled. */
+const NORMAL_READING_KEYS = ["tb", "fc", "ph", "ta"];
+const NORMAL_READING_VALUES = {
+  tb: "5",
+  fc: "3",
+  ph: "7.4",
+  ta: "120",
+};
+
+function applyNormalReadingsColumn(prev, side) {
+  const next = { ...prev };
+  for (const key of NORMAL_READING_KEYS) {
+    next[key] = { ...prev[key], [side]: NORMAL_READING_VALUES[key] };
+  }
+  return next;
+}
+
 const POOL_ROWS = [
   { key: "tb", label: "TB" },
   { key: "fc", label: "FC" },
@@ -81,6 +106,54 @@ function ChemicalsAddedFields({ idPrefix, values, onFieldChange, rows }) {
           suffix={suffix}
         />
       ))}
+    </div>
+  );
+}
+
+function PoolClarifierControl({ idPrefix, clarifier, onAdd, onRemove }) {
+  const trimmed = String(clarifier ?? "").trim();
+  const active = trimmed.length > 0;
+  const displayAmount = active ? trimmed : "";
+
+  if (!active) {
+    return (
+      <div className={styles.clarifierAddWrap}>
+        <button
+          type="button"
+          className={styles.clarifierAddBtn}
+          id={`${idPrefix}-clarifier-add`}
+          onClick={onAdd}
+        >
+          Add Clarifier
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.chemRow}>
+      <span className={styles.chemLabel} id={`${idPrefix}-clarifier-label`}>
+        Clarifier
+      </span>
+      <div className={styles.clarifierActiveWrap}>
+        <span
+          className={styles.clarifierValueBox}
+          aria-labelledby={`${idPrefix}-clarifier-label`}
+        >
+          {displayAmount}
+        </span>
+        <span className={styles.chemSuffix} aria-hidden>
+          bottle
+        </span>
+        <button
+          type="button"
+          className={styles.clarifierRemoveBtn}
+          onClick={onRemove}
+          aria-label="Remove clarifier"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }
@@ -155,6 +228,7 @@ function BeforeAfterSection({
   values,
   idPrefix,
   onCellChange,
+  onNormalColumn,
   children,
 }) {
   return (
@@ -167,6 +241,27 @@ function BeforeAfterSection({
           <span className={styles.headerSpacer} aria-hidden />
           <span className={styles.colHeader}>Before</span>
           <span className={styles.colHeader}>After</span>
+        </div>
+        <div className={styles.normalBtnRow}>
+          <span className={styles.normalBtnRowSpacer} aria-hidden />
+          <button
+            type="button"
+            className={styles.normalFillBtn}
+            id={`${idPrefix}-normal-before`}
+            onClick={() => onNormalColumn("before")}
+            aria-label={`${title}: fill Before with normal TB, FC, pH, TA`}
+          >
+            Normal
+          </button>
+          <button
+            type="button"
+            className={styles.normalFillBtn}
+            id={`${idPrefix}-normal-after`}
+            onClick={() => onNormalColumn("after")}
+            aria-label={`${title}: fill After with normal TB, FC, pH, TA`}
+          >
+            Normal
+          </button>
         </div>
         {rows.map(({ key, label, setTo }) => (
           <BeforeAfterRow
@@ -208,7 +303,7 @@ export default function ReadingsForm({
     ta: pair(),
     spaTemp: pair(),
   }));
-  const [poolChem, setPoolChem] = useState(emptyChem);
+  const [poolChem, setPoolChem] = useState(emptyPoolChem);
   const [spaChem, setSpaChem] = useState(emptyChem);
 
   const stateRef = useRef({ pool, spa, poolChem, spaChem });
@@ -269,9 +364,28 @@ export default function ReadingsForm({
     }));
   };
 
+  const fillNormalReadings = (section, side) => {
+    hasUserEditedRef.current = true;
+    if (section === "pool") {
+      setPool((p) => applyNormalReadingsColumn(p, side));
+    } else {
+      setSpa((p) => applyNormalReadingsColumn(p, side));
+    }
+  };
+
   const setPoolChemField = (key, value) => {
     hasUserEditedRef.current = true;
     setPoolChem((c) => ({ ...c, [key]: value }));
+  };
+
+  const addPoolClarifier = () => {
+    hasUserEditedRef.current = true;
+    setPoolChem((c) => ({ ...c, clarifier: POOL_CLARIFIER_DEFAULT }));
+  };
+
+  const removePoolClarifier = () => {
+    hasUserEditedRef.current = true;
+    setPoolChem((c) => ({ ...c, clarifier: "" }));
   };
 
   const setSpaChemField = (key, value) => {
@@ -297,6 +411,7 @@ export default function ReadingsForm({
         values={pool}
         idPrefix={`${idPrefix}-pool`}
         onCellChange={setPoolCell}
+        onNormalColumn={(side) => fillNormalReadings("pool", side)}
       >
         <h3
           className={styles.subsectionTitle}
@@ -304,12 +419,22 @@ export default function ReadingsForm({
         >
           Chemicals Added
         </h3>
-        <ChemicalsAddedFields
-          idPrefix={`${idPrefix}-pool-chem`}
-          values={poolChem}
-          onFieldChange={setPoolChemField}
-          rows={POOL_CHEMICAL_ROWS}
-        />
+        <div className={styles.poolChemAdded}>
+          <ChemicalsAddedFields
+            idPrefix={`${idPrefix}-pool-chem`}
+            values={poolChem}
+            onFieldChange={setPoolChemField}
+            rows={POOL_CHEMICAL_ROWS}
+          />
+          <div className={styles.clarifierPoolBlock}>
+            <PoolClarifierControl
+              idPrefix={`${idPrefix}-pool-chem`}
+              clarifier={poolChem.clarifier}
+              onAdd={addPoolClarifier}
+              onRemove={removePoolClarifier}
+            />
+          </div>
+        </div>
       </BeforeAfterSection>
 
       <BeforeAfterSection
@@ -319,6 +444,7 @@ export default function ReadingsForm({
         values={spa}
         idPrefix={`${idPrefix}-spa`}
         onCellChange={setSpaCell}
+        onNormalColumn={(side) => fillNormalReadings("spa", side)}
       >
         <h3
           className={styles.subsectionTitle}

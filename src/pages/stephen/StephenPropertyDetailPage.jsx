@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
-import { getStephenPropertyBySlug } from "../../data/stephenProperties.js";
 import { getTechnicianBySlug } from "../../data/technicians.js";
 import {
   diffServiceLogPatch,
   emptyServiceLogWorkPatch,
   getPropertyByTechnicianAndSlug,
+  getRouteSheetItemsForWeek,
   mapWorkStateToServiceLogPatch,
   workStateFromServiceLogRow,
 } from "../../lib/api.js";
+import { getActiveRouteSheetSaturdayEastern } from "../../lib/routeSheetWeek.js";
 import PropertyHoseControls from "../../components/PropertyHoseControls.jsx";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import ReadingsForm from "../../components/ReadingsForm.jsx";
@@ -24,6 +25,10 @@ import {
   resolveDbPropertyId,
 } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
+import {
+  isRouteSheetRowIncludedOnActiveSheet,
+  isRouteSheetRowSent,
+} from "../../utils/routeSheetSentGuestCheckSummary.js";
 import { getLocalDayKey } from "../../utils/localDay.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import {
@@ -39,20 +44,22 @@ export default function StephenPropertyDetailPage() {
   const technician = getTechnicianBySlug(technicianSlug);
   const selectedRouteType = getRouteTypeFromTechnicianPath(location.pathname);
 
-  const staticProp =
-    technicianSlug === "stephen" ? getStephenPropertyBySlug(propertySlug) : null;
-  const [dbProp, setDbProp] = useState(null);
-  const [dbLoading, setDbLoading] = useState(() => !staticProp);
+  const needsRouteSheetGate =
+    technicianSlug === "stephen" &&
+    (selectedRouteType === "turnover" || selectedRouteType === "midweek");
 
-  const property =
-    staticProp ??
-    (dbProp
-      ? {
-          slug: dbProp.property_slug,
-          name: dbProp.name,
-          address: dbProp.address,
-        }
-      : null);
+  const [dbProp, setDbProp] = useState(null);
+  const [dbLoading, setDbLoading] = useState(true);
+  const [routeSheetRow, setRouteSheetRow] = useState(/** @type {Record<string, unknown> | null} */ (null));
+  const [sheetCheckDone, setSheetCheckDone] = useState(() => !needsRouteSheetGate);
+
+  const property = dbProp
+    ? {
+        slug: dbProp.property_slug,
+        name: dbProp.name,
+        address: dbProp.address,
+      }
+    : null;
 
   const listPath = selectedRouteType
     ? technicianRouteListPath(technicianSlug, selectedRouteType)
@@ -90,11 +97,6 @@ export default function StephenPropertyDetailPage() {
 
   useEffect(() => {
     if (!technicianSlug || !propertySlug) return;
-    if (technicianSlug === "stephen" && getStephenPropertyBySlug(propertySlug)) {
-      setDbProp(null);
-      setDbLoading(false);
-      return;
-    }
     let cancelled = false;
     setDbLoading(true);
     setDbProp(null);
@@ -107,6 +109,50 @@ export default function StephenPropertyDetailPage() {
       cancelled = true;
     };
   }, [technicianSlug, propertySlug]);
+
+  useEffect(() => {
+    if (!needsRouteSheetGate) {
+      setRouteSheetRow(null);
+      setSheetCheckDone(true);
+      return;
+    }
+    if (dbLoading) {
+      setSheetCheckDone(false);
+      return;
+    }
+    if (!dbProp?.id) {
+      setRouteSheetRow(null);
+      setSheetCheckDone(true);
+      return;
+    }
+    let cancelled = false;
+    setSheetCheckDone(false);
+    void (async () => {
+      const week = getActiveRouteSheetSaturdayEastern();
+      const items = await getRouteSheetItemsForWeek(week, selectedRouteType, technicianSlug);
+      const sent = (items ?? []).filter(isRouteSheetRowSent).filter(isRouteSheetRowIncludedOnActiveSheet);
+      const row =
+        sent.find((r) => String(r.property_id ?? "") === String(dbProp.id ?? "")) ?? null;
+      if (import.meta.env.DEV) {
+        console.log("[technician route detail]", {
+          week_start_date: week,
+          route_type: selectedRouteType,
+          technician_slug: technicianSlug,
+          rows_from_supabase: items?.length ?? 0,
+          sheet_row_count_after_filters: sent.length,
+          matched_property_on_sheet: !!row,
+          legacy_static_property: false,
+        });
+      }
+      if (!cancelled) {
+        setRouteSheetRow(row);
+        setSheetCheckDone(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsRouteSheetGate, dbLoading, dbProp?.id, selectedRouteType, technicianSlug]);
 
   useEffect(() => {
     if (!property) return;
@@ -241,48 +287,63 @@ export default function StephenPropertyDetailPage() {
     return <Navigate to="/technicians" replace />;
   }
 
-  if (dbLoading) {
-    return (
-      <SubpageTemplate title="Loading…" backTo={listPath} readableDarkText>
-        <div className={styles.body}>Loading property…</div>
-      </SubpageTemplate>
-    );
-  }
-
-  if (!property) {
+  if (!dbLoading && !property) {
     return <Navigate to={listPath} replace />;
   }
 
+  if (!dbLoading && property && needsRouteSheetGate && sheetCheckDone && !routeSheetRow) {
+    return <Navigate to={listPath} replace />;
+  }
+
+  const badgeSheet =
+    needsRouteSheetGate && routeSheetRow
+      ? {
+          guest_check: routeSheetRow.guest_check,
+          pool_heat: routeSheetRow.pool_heat,
+        }
+      : null;
+
+  const displayTitle =
+    property?.name ??
+    (propertySlug ? String(propertySlug).replace(/-/g, " ") : "Property");
+  const displaySubtitle = property?.address ?? "";
+  const slugForUi = property?.slug ?? propertySlug ?? "";
+
   return (
     <SubpageTemplate
-      title={property.name}
-      subtitle={property.address}
+      title={displayTitle}
+      subtitle={displaySubtitle || undefined}
       backTo={listPath}
       readableDarkText
     >
       <div className={styles.body}>
-        <RouteParamBadges
-          propertySlug={property.slug}
-          className={styles.routeParams}
-        />
-        <PropertyHoseControls
-          propertySlug={property.slug}
-          technicianSlug={technicianSlug}
-          propertyName={property.name}
-          enableActivityLog
-        />
-        <ServicePhotoUploads
-          propertySlug={property.slug}
-          propertyName={property.name}
-          technicianSlug={technicianSlug}
-          serviceLogRow={serviceLogRow}
-        />
-        <ReadingsForm
-          idPrefix={property.slug}
-          onWorkStateChange={handleWorkStateChange}
-          serviceLogRow={serviceLogRow}
-          serviceLogsReady={serviceLogsReady}
-        />
+        {property && slugForUi ? (
+          <>
+            <RouteParamBadges
+              propertySlug={slugForUi}
+              routeSheet={badgeSheet}
+              className={styles.routeParams}
+            />
+            <PropertyHoseControls
+              propertySlug={slugForUi}
+              technicianSlug={technicianSlug}
+              propertyName={property.name}
+              enableActivityLog
+            />
+            <ServicePhotoUploads
+              propertySlug={slugForUi}
+              propertyName={property.name}
+              technicianSlug={technicianSlug}
+              serviceLogRow={serviceLogRow}
+            />
+            <ReadingsForm
+              idPrefix={slugForUi}
+              onWorkStateChange={handleWorkStateChange}
+              serviceLogRow={serviceLogRow}
+              serviceLogsReady={serviceLogsReady}
+            />
+          </>
+        ) : null}
       </div>
     </SubpageTemplate>
   );

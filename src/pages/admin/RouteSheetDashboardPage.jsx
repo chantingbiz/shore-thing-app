@@ -1,19 +1,97 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SubpageTemplate from "../SubpageTemplate.jsx";
-import { archiveCompletedServiceLogs, getTodayEasternDate } from "../../lib/api.js";
+import {
+  archiveCompletedServiceLogs,
+  getPropertiesForTechnician,
+  getRouteSettings,
+  getRouteSheetItemsForWeek,
+  getRouteSheetWeekSentSnapshot,
+  getTodayEasternDate,
+  ROUTE_SHEET_ITEMS_ON_CONFLICT,
+  upsertRouteSheetItemsBatch,
+} from "../../lib/api.js";
+import {
+  calendarDateForRouteSheetDay,
+  formatDayChipMd,
+  getActiveRouteSheetSaturdayEastern,
+  getRouteSheetWeekLabel,
+} from "../../lib/routeSheetWeek.js";
 import { resetSupabaseCaches } from "../../lib/supabaseStore.js";
+import { isRouteSheetRowIncludedOnActiveSheet } from "../../utils/routeSheetSentGuestCheckSummary.js";
 import styles from "./RouteSheetDashboardPage.module.css";
 import {
   ROUTE_CALENDAR_DAYS,
   ROUTE_SHEET_TYPES,
   ROUTE_SHEET_TECHNICIANS,
-  MOCK_ROUTE_PROPERTIES,
   isActiveOnDay,
   defaultIncludedOnSheet,
   inclusionStorageKey,
   sheetTypeForCalendarDay,
   isWeekdayDispatch,
 } from "./routeSheetDashboardMock.js";
+
+/**
+ * Seed rows: `properties` is authoritative list; `route_settings` merged by property_id.
+ * `assignedTechnicianSlug` = dispatcher-selected technician (future vacation cover).
+ * @param {Record<string, unknown>[]} propsList
+ * @param {Record<string, unknown>[]} settingsRows
+ * @param {string} assignedTechnicianSlugLower
+ */
+function mergePropertiesWithRouteSettings(propsList, settingsRows, assignedTechnicianSlugLower) {
+  const settingsById = new Map(settingsRows.map((s) => [String(s.property_id), s]));
+  return propsList.map((prop) => {
+    const pid = String(prop.id);
+    const s = settingsById.get(pid);
+    const gc = s?.guest_check;
+    const serviceType = gc === "guest" ? "guest" : "check";
+    const ph = s?.pool_heat;
+    const poolHeat = ph === "pool_heat" || ph === "heat";
+    const sourceTechnicianSlug = String(prop.technician_slug ?? "").toLowerCase();
+    return {
+      id: pid,
+      propertyName: String(s?.property_name ?? prop.name ?? "Property"),
+      address: String(prop.address ?? ""),
+      /** Legacy filter field: same as assigned for current workflow */
+      technicianSlug: assignedTechnicianSlugLower,
+      sourceTechnicianSlug,
+      assignedTechnicianSlug: assignedTechnicianSlugLower,
+      serviceType,
+      poolHeat,
+      comments: "",
+      activeOnSaturday: true,
+      activeOnSunday: true,
+      activeOnMidweek: true,
+    };
+  });
+}
+
+/** @param {Record<string, unknown>} item @param {Record<string, unknown> | undefined} propertyRow */
+function mapRouteSheetItemToDashboardRow(item, propertyRow) {
+  const gc = item.guest_check;
+  const serviceType = gc === "guest" ? "guest" : "check";
+  const ph = item.pool_heat;
+  const poolHeat = ph === "pool_heat" || ph === "heat";
+  const assigned = String(
+    item.assigned_technician_slug ?? item.technician_slug ?? ""
+  ).toLowerCase();
+  const source = String(
+    item.source_technician_slug ?? propertyRow?.technician_slug ?? ""
+  ).toLowerCase();
+  return {
+    id: String(item.property_id),
+    propertyName: String(item.property_name || propertyRow?.name || "Property"),
+    address: String(propertyRow?.address ?? ""),
+    technicianSlug: assigned,
+    sourceTechnicianSlug: source,
+    assignedTechnicianSlug: assigned,
+    serviceType,
+    poolHeat,
+    comments: item.comments != null ? String(item.comments) : "",
+    activeOnSaturday: true,
+    activeOnSunday: true,
+    activeOnMidweek: true,
+  };
+}
 
 /**
  * Future: per technician + sheet type (turnover | midweek) when no sheet is needed.
@@ -33,31 +111,32 @@ function rowVisualClass(prop, dayKey, included) {
   return styles.rowMuted;
 }
 
-function isBothSheetTypesSent(sentMap, slug) {
-  return !!(sentMap[`${slug}::turnover`] && sentMap[`${slug}::midweek`]);
+function isBothSheetTypesSent(weekSentSnapshot, slug) {
+  return !!(
+    weekSentSnapshot[`${slug}::turnover`] && weekSentSnapshot[`${slug}::midweek`]
+  );
 }
 
-/** Default calendar day when opening a route from the status panel. */
+/** Default calendar day when opening a route from the status panel or after auto-switch. */
 function defaultDayKeyForSheetType(typeKey) {
-  return typeKey === "turnover" ? "saturday" : "monday";
+  return typeKey === "turnover" ? "saturday" : "wednesday";
 }
 
 /** Pending-queue default: Turnover first until sent, then Midweek. */
-function defaultSheetTypeForTechnician(sentMap, slug) {
-  return sentMap[`${slug}::turnover`] ? "midweek" : "turnover";
+function defaultSheetTypeForTechnician(weekSentSnapshot, slug) {
+  return weekSentSnapshot[`${slug}::turnover`] ? "midweek" : "turnover";
 }
 
 /**
  * Sheets to show in the archive preview (consolidated labels).
- * Temporary rule: any technician+type marked sent in local `sentMap` counts as ready to preview-archive.
- * Swap this for real eligibility (e.g. Supabase) when wired.
+ * Uses `route_sheet_items` sent snapshot for the active Saturday-based sheet week.
  */
-function getArchivePreviewFromSentMap(sentMap) {
+function getArchivePreviewFromWeekSnapshot(weekSentSnapshot) {
   const rows = [];
   for (const t of ROUTE_SHEET_TECHNICIANS) {
     for (const st of ROUTE_SHEET_TYPES) {
       const key = `${t.slug}::${st.key}`;
-      if (!sentMap[key]) continue;
+      if (!weekSentSnapshot[key]) continue;
       rows.push({ key, label: `${t.name} ${st.label}` });
     }
   }
@@ -94,16 +173,178 @@ function RowCommentsTextarea({ value, onChange, ariaLabel }) {
 /** @typedef {{ serviceType?: 'guest' | 'check', poolHeat?: boolean, comments?: string }} PropertyEditPatch */
 
 export default function RouteSheetDashboardPage() {
+  /** Eastern Saturday anchor for `route_sheet_items.week_start_date` (Thursday 7 AM rollover). */
+  const [weekStartDate] = useState(() => getActiveRouteSheetSaturdayEastern());
+  const weekLabel = useMemo(() => getRouteSheetWeekLabel(weekStartDate), [weekStartDate]);
+
+  /** Calendar `M/D` per day chip, anchored to the active route-sheet Saturday week. */
+  const dayChipMdByKey = useMemo(() => {
+    const out = {};
+    for (const d of ROUTE_CALENDAR_DAYS) {
+      const ymd = calendarDateForRouteSheetDay(weekStartDate, d.key);
+      out[d.key] = formatDayChipMd(ymd);
+    }
+    return out;
+  }, [weekStartDate]);
   const [technicianSlug, setTechnicianSlug] = useState("");
   const [dayKey, setDayKey] = useState("");
   const [includedOverrides, setIncludedOverrides] = useState(() => ({}));
-  const [sentMap, setSentMap] = useState(() => ({}));
-  /** Local row overrides; mock stays source of truth for filter fields. */
+  /** Sent flags from `route_sheet_items` for this week (`${slug}::turnover` etc.). */
+  const [weekSentSnapshot, setWeekSentSnapshot] = useState(() => (/** @type {Record<string, boolean>} */ ({})));
+  /** Rows from `route_sheet_items` or seeded from `route_settings` + `properties` address. */
+  const [sourceProperties, setSourceProperties] = useState(() => []);
+  const [sheetLoadBusy, setSheetLoadBusy] = useState(false);
+  const [sheetLoadError, setSheetLoadError] = useState(/** @type {string | null} */ (null));
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sheetReloadNonce, setSheetReloadNonce] = useState(0);
+  /** Local row overrides; DB-loaded row is baseline for filter fields. */
   const [propertyEdits, setPropertyEdits] = useState(() => (/** @type {Record<string, PropertyEditPatch>} */ ({})));
   /** Explicit Turnover vs Midweek for send/review (kept in sync with calendar day). */
   const [activeSheetType, setActiveSheetType] = useState(/** @type {'turnover' | 'midweek'} */ ("turnover"));
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [archiveStatus, setArchiveStatus] = useState(/** @type {{ kind: 'ok' | 'error', message: string } | null} */ (null));
+
+  const refreshWeekSnapshot = useCallback(async () => {
+    try {
+      const snap = await getRouteSheetWeekSentSnapshot(weekStartDate);
+      setWeekSentSnapshot(snap);
+      return snap;
+    } catch (e) {
+      console.error("[route sheet dashboard] week snapshot failed", e);
+      return {};
+    }
+  }, [weekStartDate]);
+
+  useEffect(() => {
+    void refreshWeekSnapshot();
+  }, [refreshWeekSnapshot]);
+
+  useEffect(() => {
+    if (!technicianSlug) {
+      setSourceProperties([]);
+      setPropertyEdits({});
+      setIncludedOverrides({});
+      setSheetLoadError(null);
+      setSheetLoadBusy(false);
+      return;
+    }
+    if (!dayKey) {
+      setSourceProperties([]);
+      setPropertyEdits({});
+      setIncludedOverrides({});
+      setSheetLoadBusy(false);
+      setSheetLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setSheetLoadBusy(true);
+      setSheetLoadError(null);
+      try {
+        /**
+         * Midweek hydration order (same week + assigned technician):
+         * A) Saved midweek rows in route_sheet_items (handled when `items.length > 0` below).
+         * B) Else if midweek: saved turnover rows → source of truth for guest/check + default included.
+         * C) Else: properties + route_settings merge (no turnover sheet yet for turnover, or midweek with no turnover).
+         */
+        const items = await getRouteSheetItemsForWeek(
+          weekStartDate,
+          activeSheetType,
+          technicianSlug
+        );
+        const propsList = await getPropertiesForTechnician(technicianSlug);
+        const addrById = new Map(propsList.map((p) => [String(p.id), p]));
+        const slugLower = String(technicianSlug).toLowerCase();
+        if (cancelled) return;
+        if (items.length > 0) {
+          if (import.meta.env.DEV) {
+            console.log("[route sheet dashboard] hydrate: saved sheet rows", {
+              source: "saved_route_sheet_items",
+              route_type: activeSheetType,
+              week_start_date: weekStartDate,
+              assigned_technician_slug: slugLower,
+              row_count: items.length,
+            });
+          }
+          setSourceProperties(
+            items.map((row) => mapRouteSheetItemToDashboardRow(row, addrById.get(String(row.property_id))))
+          );
+          const o = {};
+          for (const item of items) {
+            o[inclusionStorageKey(String(item.property_id), dayKey)] = !!item.included;
+          }
+          setIncludedOverrides(o);
+        } else if (activeSheetType === "midweek") {
+          const turnoverRows = await getRouteSheetItemsForWeek(
+            weekStartDate,
+            "turnover",
+            technicianSlug
+          );
+          if (turnoverRows.length > 0) {
+            const guestRows = turnoverRows.filter((r) => r.guest_check === "guest").length;
+            const checkRows = turnoverRows.filter((r) => r.guest_check === "check").length;
+            if (import.meta.env.DEV) {
+              console.log("[route sheet dashboard] hydrate: midweek from turnover", {
+                source: "saved_turnover_route_sheet_items",
+                week_start_date: weekStartDate,
+                assigned_technician_slug: slugLower,
+                turnover_row_count: turnoverRows.length,
+                guest_rows: guestRows,
+                check_rows: checkRows,
+              });
+            }
+            setSourceProperties(
+              turnoverRows.map((row) =>
+                mapRouteSheetItemToDashboardRow(row, addrById.get(String(row.property_id)))
+              )
+            );
+            const o = {};
+            for (const item of turnoverRows) {
+              const isGuest = item.guest_check === "guest";
+              o[inclusionStorageKey(String(item.property_id), dayKey)] = isGuest;
+            }
+            setIncludedOverrides(o);
+          } else {
+            const propertyIds = propsList.map((p) => p.id).filter(Boolean);
+            const settingsRows = propertyIds.length ? await getRouteSettings(propertyIds) : [];
+            const merged = mergePropertiesWithRouteSettings(propsList, settingsRows, slugLower);
+            if (import.meta.env.DEV) {
+              console.log("[route sheet dashboard] hydrate: midweek default seed (no turnover saved)", {
+                source: "properties_plus_route_settings",
+                merged_rows: merged.length,
+              });
+            }
+            setSourceProperties(merged);
+            setIncludedOverrides({});
+          }
+        } else {
+          const propertyIds = propsList.map((p) => p.id).filter(Boolean);
+          const settingsRows = propertyIds.length ? await getRouteSettings(propertyIds) : [];
+          const merged = mergePropertiesWithRouteSettings(propsList, settingsRows, slugLower);
+          if (import.meta.env.DEV) {
+            console.log("[route sheet dashboard] hydrate: turnover default seed", {
+              source: "properties_plus_route_settings",
+              merged_rows: merged.length,
+            });
+          }
+          setSourceProperties(merged);
+          setIncludedOverrides({});
+        }
+        setPropertyEdits({});
+      } catch (e) {
+        console.error("[route sheet dashboard] sheet load failed", e);
+        if (!cancelled) {
+          setSheetLoadError(e?.message ? String(e.message) : String(e));
+          setSourceProperties([]);
+        }
+      } finally {
+        if (!cancelled) setSheetLoadBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [technicianSlug, activeSheetType, weekStartDate, sheetReloadNonce, dayKey]);
 
   const hasTechnician = Boolean(technicianSlug);
   const hasDay = Boolean(dayKey);
@@ -122,14 +363,16 @@ export default function RouteSheetDashboardPage() {
 
   const filteredProperties = useMemo(() => {
     if (!technicianSlug || !dayKey) return [];
-    return MOCK_ROUTE_PROPERTIES.filter(
-      (p) => p.technicianSlug === technicianSlug && isActiveOnDay(p, dayKey)
-    );
-  }, [technicianSlug, dayKey]);
+    const want = String(technicianSlug).toLowerCase();
+    return sourceProperties.filter((p) => {
+      const assigned = String(p.assignedTechnicianSlug ?? p.technicianSlug ?? "").toLowerCase();
+      return assigned === want && isActiveOnDay(p, dayKey);
+    });
+  }, [technicianSlug, dayKey, sourceProperties]);
 
   const getEffectiveProperty = useCallback(
     (propId) => {
-      const base = MOCK_ROUTE_PROPERTIES.find((p) => p.id === propId);
+      const base = sourceProperties.find((p) => p.id === propId);
       if (!base) return null;
       const e = propertyEdits[propId];
       if (!e) return base;
@@ -138,14 +381,17 @@ export default function RouteSheetDashboardPage() {
         serviceType: e.serviceType ?? base.serviceType,
         poolHeat: e.poolHeat ?? base.poolHeat,
         comments: e.comments !== undefined ? e.comments : (base.comments ?? ""),
+        sourceTechnicianSlug: base.sourceTechnicianSlug,
+        assignedTechnicianSlug: base.assignedTechnicianSlug,
+        technicianSlug: base.technicianSlug,
       };
     },
-    [propertyEdits]
+    [propertyEdits, sourceProperties]
   );
 
   const isPropertyRowEdited = useCallback(
     (propId) => {
-      const base = MOCK_ROUTE_PROPERTIES.find((p) => p.id === propId);
+      const base = sourceProperties.find((p) => p.id === propId);
       const row = getEffectiveProperty(propId);
       if (!base || !row) return false;
       return (
@@ -154,7 +400,7 @@ export default function RouteSheetDashboardPage() {
         row.comments !== (base.comments ?? "")
       );
     },
-    [getEffectiveProperty]
+    [getEffectiveProperty, sourceProperties]
   );
 
   const patchProperty = (propId, /** @type {PropertyEditPatch} */ partial) => {
@@ -182,7 +428,11 @@ export default function RouteSheetDashboardPage() {
     setIncludedOverrides((prev) => ({ ...prev, [key]: next }));
   };
 
-  const canSend = workflowReady;
+  const canSend =
+    workflowReady &&
+    filteredProperties.length > 0 &&
+    !sheetLoadBusy &&
+    !sheetLoadError;
   const dayLabel = ROUTE_CALENDAR_DAYS.find((d) => d.key === dayKey)?.label ?? "";
   const techName = technicianSlug ? techDisplayName(technicianSlug) : "";
   const sheetTypeLabel =
@@ -191,7 +441,9 @@ export default function RouteSheetDashboardPage() {
   const selectPendingTechnician = (slug) => {
     setTechnicianSlug(slug);
     if (!dayKey) {
-      setActiveSheetType(defaultSheetTypeForTechnician(sentMap, slug));
+      const st = defaultSheetTypeForTechnician(weekSentSnapshot, slug);
+      setActiveSheetType(st);
+      setDayKey(defaultDayKeyForSheetType(st));
     }
   };
 
@@ -200,30 +452,114 @@ export default function RouteSheetDashboardPage() {
     setDayKey(defaultDayKeyForSheetType(typeKey));
   };
 
-  const handleSend = () => {
-    if (!canSend || !technicianSlug || !activeSheetType) return;
+  const handleSend = async () => {
+    if (!canSend || !technicianSlug || !activeSheetType || sendBusy) return;
+    if (filteredProperties.length === 0) return;
     const slug = technicianSlug;
     const typeKey = activeSheetType;
-    const mapKey = `${slug}::${typeKey}`;
-
-    const turnoverWas = !!sentMap[`${slug}::turnover`];
-    const midweekWas = !!sentMap[`${slug}::midweek`];
-    const turnoverNow = typeKey === "turnover" ? true : turnoverWas;
-    const midweekNow = typeKey === "midweek" ? true : midweekWas;
-
-    setSentMap((prev) => ({ ...prev, [mapKey]: true }));
-
-    if (turnoverNow && midweekNow) {
-      setTechnicianSlug("");
-      setDayKey("");
-      setActiveSheetType("turnover");
-      return;
+    const sentAt = new Date().toISOString();
+    const slugLower = String(slug).toLowerCase();
+    /** Only persist rows the dispatcher sees in the property table (same as filtered list). */
+    const rows = filteredProperties.map((prop) => {
+      const row = getEffectiveProperty(prop.id);
+      if (!row) return null;
+      const included = getIncluded(prop.id);
+      const sourceTech = String(row.sourceTechnicianSlug ?? prop.sourceTechnicianSlug ?? "").toLowerCase();
+      return {
+        week_start_date: weekStartDate,
+        route_type: typeKey,
+        property_id: prop.id,
+        property_name: row.propertyName,
+        source_technician_slug: sourceTech || slugLower,
+        assigned_technician_slug: slugLower,
+        technician_slug: slugLower,
+        guest_check: row.serviceType,
+        pool_heat: row.poolHeat ? "pool_heat" : "no_pool_heat",
+        comments: row.comments ?? "",
+        included,
+        sent_at: sentAt,
+      };
+    }).filter(Boolean);
+    const guestRowsAll = rows.filter((r) => r.guest_check === "guest").length;
+    const checkRowsAll = rows.filter((r) => r.guest_check === "check").length;
+    const guestIncluded = rows.filter(
+      (r) => r.guest_check === "guest" && isRouteSheetRowIncludedOnActiveSheet(r)
+    ).length;
+    const checkIncluded = rows.filter(
+      (r) => r.guest_check === "check" && isRouteSheetRowIncludedOnActiveSheet(r)
+    ).length;
+    const payloadAudit = rows.map((r) => ({
+      property_id: r.property_id,
+      property_name: r.property_name,
+      guest_check: r.guest_check,
+      included: r.included,
+    }));
+    console.log("[route sheet dashboard] send payload audit", {
+      week_start_date: weekStartDate,
+      route_type: typeKey,
+      day_key: dayKey,
+      assigned_technician_slug: slugLower,
+      row_count: rows.length,
+      guest_rows: guestRowsAll,
+      check_rows: checkRowsAll,
+      included_guest_rows: guestIncluded,
+      included_check_rows: checkIncluded,
+      rows: import.meta.env.DEV ? payloadAudit : "(enable dev build for per-row list)",
+    });
+    if (import.meta.env.DEV) {
+      for (const line of payloadAudit) {
+        console.log("[route sheet dashboard] send row", line);
+      }
     }
+    setSendBusy(true);
+    try {
+      console.log("[route sheet dashboard] send", {
+        row_count: rows.length,
+        onConflict: ROUTE_SHEET_ITEMS_ON_CONFLICT,
+        week_start_date: weekStartDate,
+        route_type: typeKey,
+        assigned_technician_slug: slugLower,
+      });
+      const saved = await upsertRouteSheetItemsBatch(rows);
+      console.log("[route sheet dashboard] send result", {
+        requested: rows.length,
+        returned_rows: saved?.length ?? 0,
+      });
+      if (rows.length > 0 && (saved?.length ?? 0) === 0) {
+        console.warn(
+          "[route sheet dashboard] upsert returned no rows — if the table is still empty, check RLS (INSERT denied) or that RETURNING is allowed; if rows exist, SELECT may be blocked by RLS."
+        );
+      }
+      const snap = await refreshWeekSnapshot();
+      setSheetReloadNonce((n) => n + 1);
+      const turnoverNow = !!snap[`${slug}::turnover`];
+      const midweekNow = !!snap[`${slug}::midweek`];
 
-    if (typeKey === "turnover" && !midweekNow) {
-      setActiveSheetType("midweek");
-      setDayKey(defaultDayKeyForSheetType("midweek"));
-      return;
+      if (turnoverNow && midweekNow) {
+        setTechnicianSlug("");
+        setDayKey("");
+        setActiveSheetType("turnover");
+        return;
+      }
+
+      if (typeKey === "turnover" && !midweekNow) {
+        setActiveSheetType("midweek");
+        setDayKey(defaultDayKeyForSheetType("midweek"));
+      }
+    } catch (e) {
+      const msg = e?.message ? String(e.message) : String(e);
+      const code = e?.code ? String(e.code) : "";
+      console.error("[route sheet dashboard] send failed", { message: msg, code, raw: e });
+      const rls = /row-level security|rls|policy/i.test(msg);
+      window.alert(
+        rls
+          ? `Save blocked (likely RLS): ${msg}\n\nIn Supabase, add a policy on route_sheet_items allowing INSERT/UPDATE (and SELECT if you need returning rows) for your role, or sign in as an authenticated user before using the dashboard.`
+          : msg
+            ? `Save failed: ${msg}${code ? ` [${code}]` : ""}`
+            : "Save failed. Open the console for details (unique index / onConflict mismatch is common if migrations were not applied)."
+      );
+    } finally {
+      setSendBusy(false);
     }
   };
 
@@ -235,11 +571,14 @@ export default function RouteSheetDashboardPage() {
   };
 
   const pendingTechnicians = useMemo(
-    () => ROUTE_SHEET_TECHNICIANS.filter((t) => !isBothSheetTypesSent(sentMap, t.slug)),
-    [sentMap]
+    () => ROUTE_SHEET_TECHNICIANS.filter((t) => !isBothSheetTypesSent(weekSentSnapshot, t.slug)),
+    [weekSentSnapshot]
   );
 
-  const archivePreviewSheets = useMemo(() => getArchivePreviewFromSentMap(sentMap), [sentMap]);
+  const archivePreviewSheets = useMemo(
+    () => getArchivePreviewFromWeekSnapshot(weekSentSnapshot),
+    [weekSentSnapshot]
+  );
   const canArchive = archivePreviewSheets.length > 0 && !archiveBusy;
 
   const openRouteFromStatus = (slug, typeKey) => {
@@ -254,7 +593,7 @@ export default function RouteSheetDashboardPage() {
     const labelSummary = archivePreviewSheets.map((s) => s.label).join(", ");
     const ok = window.confirm(
       "Archive completed jobs for today?\n\n" +
-        `Sheets marked sent (this session): ${labelSummary}\n\n` +
+        `Sheets marked sent (${weekLabel}): ${labelSummary}\n\n` +
         "Completed visits are saved to service history, then removed from today’s live list. " +
         "Incomplete jobs are not affected."
     );
@@ -275,11 +614,7 @@ export default function RouteSheetDashboardPage() {
           ? result.deleted_activity_logs
           : null;
       resetSupabaseCaches();
-      setSentMap((prev) => {
-        const next = { ...prev };
-        for (const k of sheetKeys) delete next[k];
-        return next;
-      });
+      void refreshWeekSnapshot();
       setArchiveStatus({
         kind: "ok",
         message:
@@ -309,18 +644,11 @@ export default function RouteSheetDashboardPage() {
   return (
     <SubpageTemplate
       title="Route Sheet Dashboard"
-      subtitle="Dispatcher workflow: choose technician and day, review properties, then send sheet (mock — Supabase later)."
+      subtitle={weekLabel}
       backTo="/administrator"
       readableDarkText
       wideLayout
     >
-      <div className={styles.toolbar}>
-        <p className={styles.intro}>
-          Work through each step: choose technician, choose day for the outgoing sheet, review properties, then send
-          sheet.
-        </p>
-      </div>
-
       <div className={styles.layout}>
         <div className={styles.mainCol}>
           <section className={styles.panel}>
@@ -382,11 +710,13 @@ export default function RouteSheetDashboardPage() {
                     <button
                       key={d.key}
                       type="button"
-                      className={`${styles.segmentBtn} ${dayKey === d.key ? styles.workflowSelectActive : ""}`}
+                      className={`${styles.segmentBtn} ${styles.dayChipBtn} ${dayKey === d.key ? styles.workflowSelectActive : ""}`}
                       onClick={() => setDayKey(d.key)}
                       disabled={!hasTechnician}
+                      aria-label={`${d.label} ${dayChipMdByKey[d.key] ?? ""}`.trim()}
                     >
-                      {d.label}
+                      <span className={styles.dayChipDate}>{dayChipMdByKey[d.key] ?? "—"}</span>
+                      <span className={styles.dayChipName}>{d.label}</span>
                     </button>
                   ))}
                 </div>
@@ -427,19 +757,21 @@ export default function RouteSheetDashboardPage() {
                 <button
                   type="button"
                   className={styles.sendBtn}
-                  disabled={!canSend}
-                  onClick={handleSend}
+                  disabled={!canSend || sendBusy}
+                  onClick={() => void handleSend()}
                 >
-                  {canSend
-                    ? `Send ${sheetTypeLabel} Sheet to ${techName}`
-                    : "Choose technician and day to continue"}
+                  {sendBusy
+                    ? "Sending…"
+                    : canSend
+                      ? `Send ${sheetTypeLabel} Sheet to ${techName}`
+                      : "Choose technician and day to continue"}
                 </button>
                 <p className={styles.sendHint}>
-                  {canSend && sentMap[sentKey]
-                    ? `Marked ${sheetTypeLabel} sheet as sent for ${techName} (local only).`
+                  {canSend && weekSentSnapshot[sentKey]
+                    ? `${weekLabel}: ${sheetTypeLabel} sheet saved for ${techName} in Supabase.`
                     : canSend
-                      ? "Send sheet is simulated — only local state updates."
-                      : "Choose technician and day to send sheet."}
+                      ? "Sends route_sheet_items (properties + route_settings merge when no saved sheet yet)."
+                      : "Choose technician and day; properties load from Supabase."}
                 </p>
               </div>
             </div>
@@ -453,9 +785,19 @@ export default function RouteSheetDashboardPage() {
               <p className={`${styles.emptyPrompt} ${styles.emptyPromptMuted}`}>
                 Choose technician and day to review properties.
               </p>
+            ) : sheetLoadBusy ? (
+              <p className={styles.emptyPrompt}>Loading route sheet from Supabase…</p>
+            ) : sheetLoadError ? (
+              <p className={styles.emptyPrompt}>Could not load sheet: {sheetLoadError}</p>
+            ) : sourceProperties.length === 0 ? (
+              <p className={styles.emptyPrompt}>
+                No properties in Supabase for technician <strong>{techName}</strong> (check{" "}
+                <code>properties.technician_slug</code>).
+              </p>
             ) : filteredProperties.length === 0 ? (
               <p className={styles.emptyPrompt}>
-                No properties on file for {techName} on {dayLabel} (mock data).
+                No properties for {techName} on {dayLabel} with the current day filter (all loaded rows are inactive
+                for this weekday).
               </p>
             ) : (
               <div className={styles.tableWrap}>
@@ -486,7 +828,7 @@ export default function RouteSheetDashboardPage() {
                         <tr key={prop.id} className={rowClass}>
                           <td
                             className={styles.propName}
-                            title={isPropertyRowEdited(prop.id) ? "Row differs from mock defaults" : undefined}
+                            title={isPropertyRowEdited(prop.id) ? "Row differs from saved defaults" : undefined}
                           >
                             {row.propertyName}
                           </td>
@@ -565,7 +907,7 @@ export default function RouteSheetDashboardPage() {
               {ROUTE_SHEET_TECHNICIANS.map((t) =>
                 ROUTE_SHEET_TYPES.map((st) => {
                   const key = `${t.slug}::${st.key}`;
-                  const sent = !!sentMap[key];
+                  const sent = !!weekSentSnapshot[key];
                   const eligible = needsSheet(t.slug, st.key);
                   const active = isStatusRowActive(t.slug, st.key);
                   return (
@@ -596,8 +938,8 @@ export default function RouteSheetDashboardPage() {
           <aside className={styles.panel} aria-label="Archive completed services">
             <h2 className={styles.panelTitle}>Archive completed services</h2>
             <p className={styles.archiveIntro}>
-              End-of-day: move completed visits into archived service history. Preview lists sheets you&apos;ve marked{" "}
-              <strong>Sent</strong> in this dispatcher session.
+              End-of-day: move completed visits into archived service history. Preview lists route types marked{" "}
+              <strong>Sent</strong> for {weekLabel}.
             </p>
             {archivePreviewSheets.length > 0 ? (
               <ul className={styles.archivePreviewList}>

@@ -92,6 +92,9 @@ function ChemList({ water, workState }) {
           ["Pucks", chem.pucks],
           ["Granulated", chem.granulated],
           ["TA added", chem.ta],
+          ...(String(chem?.clarifier ?? "").trim()
+            ? [["Clarifier", `${String(chem.clarifier).trim()} bottle`]]
+            : []),
         ]
       : [
           ["Mini pucks", chem.pucks],

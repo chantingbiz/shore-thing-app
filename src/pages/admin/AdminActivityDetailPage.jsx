@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { getTechnicianBySlug, getTechnicianRouteProperties } from "../../data/technicians.js";
+import { getTechnicianBySlug } from "../../data/technicians.js";
 import {
   formatActivityTime,
   getFirstActivityTimestampToday,
@@ -8,26 +8,58 @@ import {
   getPropertiesTouchedToday,
   getTechnicianEventsToday,
 } from "../../utils/activityLog.js";
+import { getAdminPropertyDayStatus } from "../../utils/technicianPropertyStatus.js";
 import {
-  getAdminPropertyDayStatus,
-  getTechnicianRouteDaySummaryByPropertyId,
-} from "../../utils/technicianPropertyStatus.js";
+  getActiveRouteSheetSaturdayEastern,
+  getOperationalRouteSheetTypeForToday,
+} from "../../lib/routeSheetWeek.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
 import detailStyles from "./AdminActivityDetailPage.module.css";
 import { primeTechnicianToday } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
+import { fetchRouteSheetSentGuestCheckSummary } from "../../utils/routeSheetSentGuestCheckSummary.js";
 
 export default function AdminActivityDetailPage() {
   const { techSlug } = useParams();
+  const techSlugLower = String(techSlug ?? "").toLowerCase();
   useSupabaseSyncTick();
-  const [, setPoll] = useState(0);
+  const [poll, setPoll] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [sheetPair, setSheetPair] = useState({
+    turnover: /** @type {Awaited<ReturnType<typeof fetchRouteSheetSentGuestCheckSummary>> | null} */ (
+      null
+    ),
+    midweek: /** @type {Awaited<ReturnType<typeof fetchRouteSheetSentGuestCheckSummary>> | null} */ (
+      null
+    ),
+  });
 
   useEffect(() => {
     const id = window.setInterval(() => setPoll((n) => n + 1), 4000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (techSlugLower !== "stephen") return;
+    primeTechnicianToday("stephen", []);
+  }, [techSlugLower]);
+
+  useEffect(() => {
+    if (techSlugLower !== "stephen") return;
+    let cancelled = false;
+    const week = getActiveRouteSheetSaturdayEastern();
+    void (async () => {
+      const [turnover, midweek] = await Promise.all([
+        fetchRouteSheetSentGuestCheckSummary("stephen", "turnover", { weekStartDate: week }),
+        fetchRouteSheetSentGuestCheckSummary("stephen", "midweek", { weekStartDate: week }),
+      ]);
+      if (!cancelled) setSheetPair({ turnover, midweek });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [techSlugLower, refreshTick, poll]);
 
   const handleRefresh = useCallback(() => {
     setRefreshTick((n) => n + 1);
@@ -47,23 +79,25 @@ export default function AdminActivityDetailPage() {
         readableDarkText
       >
         <p className={styles.placeholderNote}>
-          Activity detail for {tech.name} is not available yet. No activity
-          data is recorded for this technician in this version.
+          Activity detail for {tech.name} is not available yet. No activity data is recorded for
+          this technician in this version.
         </p>
       </SubpageTemplate>
     );
   }
 
-  primeTechnicianToday("stephen", []);
   void refreshTick;
+  const operationalType = useMemo(() => getOperationalRouteSheetTypeForToday(), [poll, refreshTick]);
   const firstAt = getFirstActivityTimestampToday("stephen");
   const properties = getPropertiesTouchedToday("stephen");
   const rawEvents = getTechnicianEventsToday("stephen");
   const groupedEvents = getGroupedDisplayEvents(rawEvents);
-  const { total, completedCount, inProgressCount } = getTechnicianRouteDaySummaryByPropertyId(
-    tech.slug,
-    getTechnicianRouteProperties(tech.slug)
-  );
+  const to = sheetPair.turnover;
+  const mw = sheetPair.midweek;
+  const showRouteStats =
+    operationalType === "turnover"
+      ? !!to && (to.guestTotal ?? 0) + (to.checkTotal ?? 0) > 0
+      : !!mw && (mw.guestTotal ?? 0) > 0;
 
   return (
     <SubpageTemplate
@@ -75,47 +109,48 @@ export default function AdminActivityDetailPage() {
         <p className={detailStyles.summary} style={{ margin: 0, flex: 1 }}>
           {firstAt != null ? (
             <>
-              First activity today:{" "}
-              <strong>{formatActivityTime(firstAt)}</strong>
+              First activity today: <strong>{formatActivityTime(firstAt)}</strong>
             </>
           ) : (
             <>No activity logged today.</>
           )}
         </p>
-        <button
-          type="button"
-          className={styles.refreshBtn}
-          onClick={handleRefresh}
-        >
+        <button type="button" className={styles.refreshBtn} onClick={handleRefresh}>
           Refresh
         </button>
       </div>
 
-      <div
-        className={styles.routeDayStats}
-        aria-label="Route completion summary for today"
-      >
-        <p className={styles.routeStatPill}>
-          {completedCount}/{total} completed
-        </p>
-        <p className={styles.routeStatPill}>
-          {inProgressCount} in progress
-        </p>
-      </div>
+      {showRouteStats && operationalType === "turnover" && to ? (
+        <div
+          className={styles.routeDayStats}
+          aria-label="Turnover route sheet (today)"
+        >
+          <p className={styles.routeStatPill}>
+            {to.guestCompleted}/{to.guestTotal} guests completed
+          </p>
+          <p className={styles.routeStatPill}>
+            {to.checkCompleted}/{to.checkTotal} checks completed
+          </p>
+        </div>
+      ) : showRouteStats && operationalType === "midweek" && mw ? (
+        <div
+          className={styles.routeDayStats}
+          aria-label="Midweek route sheet (today)"
+        >
+          <p className={styles.routeStatPill}>
+            {mw.guestCompleted}/{mw.guestTotal} guests completed
+          </p>
+        </div>
+      ) : null}
 
       {properties.length === 0 ? (
-        <p className={styles.placeholderNote}>
-          No properties visited yet today.
-        </p>
+        <p className={styles.placeholderNote}>No properties visited yet today.</p>
       ) : (
         <>
           <h2 className={detailStyles.sectionHeading}>Properties today</h2>
           <nav className={styles.list} aria-label="Properties with activity">
             {properties.map((p) => {
-              const status = getAdminPropertyDayStatus(
-                "stephen",
-                p.propertySlug
-              );
+              const status = getAdminPropertyDayStatus("stephen", p.propertySlug);
               return (
                 <Link
                   key={p.propertySlug}
@@ -127,13 +162,9 @@ export default function AdminActivityDetailPage() {
                     Last: {formatActivityTime(p.lastT)} · {p.summary}
                   </p>
                   {status === "completed" ? (
-                    <span className={styles.statusBadgeCompleted}>
-                      Completed
-                    </span>
+                    <span className={styles.statusBadgeCompleted}>Completed</span>
                   ) : (
-                    <span className={styles.statusBadgeInProgress}>
-                      In progress
-                    </span>
+                    <span className={styles.statusBadgeInProgress}>In progress</span>
                   )}
                 </Link>
               );
@@ -151,9 +182,7 @@ export default function AdminActivityDetailPage() {
                 key={`${ev.t}-${ev.propertySlug}-${ev.type}-${i}`}
                 className={detailStyles.eventItem}
               >
-                <span className={detailStyles.eventTime}>
-                  {formatActivityTime(ev.t)}
-                </span>
+                <span className={detailStyles.eventTime}>{formatActivityTime(ev.t)}</span>
                 <span className={detailStyles.eventBody}>
                   {ev.propertyName} — {ev.displayLabel}
                 </span>

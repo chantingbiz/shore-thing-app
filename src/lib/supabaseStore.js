@@ -67,6 +67,13 @@ export function subscribeToSupabaseChanges() {
         emitter.emit();
       }
     )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "route_sheet_items" },
+      () => {
+        emitter.emit();
+      }
+    )
     .subscribe();
 
   return () => {

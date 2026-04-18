@@ -6,8 +6,8 @@ import styles from "./TechnicianRoutePropertiesPage.module.css";
 
 /**
  * Route-type property list entry point for any technician.
- * Stephen: full card UI with mock turnover/midweek slug filters (future: Supabase per sheet).
- * Others: placeholder until separate turnover/midweek lists are loaded from Supabase.
+ * Stephen: list from sent `route_sheet_items` (see StephenRoutePropertyList).
+ * Others: placeholder until turnover/midweek lists are loaded from Supabase.
  *
  * @param {{ routeType: import('../../data/technicianRouteSheetsMock.js').TechnicianRouteType }} props
  */

@@ -50,6 +50,11 @@ function formatChem(val, suffix) {
   return suffix ? `${val} ${suffix}` : String(val);
 }
 
+function trimmedPoolClarifier(raw) {
+  const v = raw == null ? "" : String(raw).trim();
+  return v || null;
+}
+
 export default function AdminReadOnlyWorkView({
   serviceLog,
   techSlug,
@@ -174,6 +179,14 @@ export default function AdminReadOnlyWorkView({
             </span>
           </div>
         ))}
+        {trimmedPoolClarifier(serviceLog?.pool_clarifier) ? (
+          <div className={styles.chemRow}>
+            <span className={styles.rowLab}>Clarifier</span>
+            <span className={styles.chemVal}>
+              {trimmedPoolClarifier(serviceLog?.pool_clarifier)} bottle
+            </span>
+          </div>
+        ) : null}
       </section>
 
       <section className={styles.section}>

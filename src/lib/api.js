@@ -10,13 +10,14 @@ export { getTodayEasternDate } from "./easternDate.js";
 export const SERVICE_PHOTOS_BUCKET = "pool-photos";
 
 const SERVICE_LOG_SELECT_BASE =
-  "id,property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
+  "id,property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,pool_clarifier,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
 
 /** `service_logs` columns for Chemicals Added (not TA readings before/after). */
 export const SERVICE_LOG_CHEMICAL_COLUMNS = [
   "pool_pucks",
   "pool_granulated",
   "pool_ta_added",
+  "pool_clarifier",
   "spa_mini_pucks",
   "spa_granulated",
   "spa_ta_added",
@@ -31,7 +32,7 @@ function patchIncludesChemicalColumns(patch) {
 
 /**
  * Chemicals Added → `service_logs` columns (distinct from pool/spa TA readings).
- * Pool: Pucks → pool_pucks, Granulated → pool_granulated, TA → pool_ta_added.
+ * Pool: Pucks → pool_pucks, Granulated → pool_granulated, TA → pool_ta_added, Clarifier → pool_clarifier.
  * Spa: Mini Pucks → spa_mini_pucks, Granulated → spa_granulated, TA → spa_ta_added.
  * @param {{ poolChem?: any, spaChem?: any }} state
  */
@@ -42,6 +43,7 @@ export function mapChemicalWorkStateToServiceLogPatch(state) {
     pool_pucks: poolChem.pucks ?? "",
     pool_granulated: poolChem.granulated ?? "",
     pool_ta_added: poolChem.ta ?? "",
+    pool_clarifier: poolChem.clarifier ?? "",
     spa_mini_pucks: spaChem.pucks ?? "",
     spa_granulated: spaChem.granulated ?? "",
     spa_ta_added: spaChem.ta ?? "",
@@ -111,7 +113,7 @@ export function emptyNestedWorkStateForServiceLog() {
       ta: p(),
       spaTemp: p(),
     },
-    poolChem: { pucks: "", granulated: "", ta: "" },
+    poolChem: { pucks: "", granulated: "", ta: "", clarifier: "" },
     spaChem: { pucks: "", granulated: "", ta: "" },
   };
 }
@@ -183,6 +185,7 @@ export function workStateFromServiceLogRow(row) {
       pucks: str(row.pool_pucks),
       granulated: str(row.pool_granulated),
       ta: str(row.pool_ta_added),
+      clarifier: str(row.pool_clarifier),
     },
     spaChem: {
       pucks: str(row.spa_mini_pucks),
@@ -335,9 +338,133 @@ export async function getRouteSettings(propertyIds) {
   if (!propertyIds?.length) return [];
   const { data, error } = await supabase
     .from("route_settings")
-    .select("property_id,guest_check,pool_heat,updated_at")
+    .select("property_id,property_name,technician_slug,guest_check,pool_heat,updated_at")
     .in("property_id", propertyIds);
   if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * All `route_settings` rows for a technician (defaults for weekly sheet seeding).
+ * @param {string} technicianSlug
+ */
+export async function getRouteSettingsRowsForTechnician(technicianSlug) {
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  if (!slug) return [];
+  const { data, error } = await supabase
+    .from("route_settings")
+    .select("property_id,property_name,technician_slug,guest_check,pool_heat,updated_at")
+    .eq("technician_slug", slug);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Weekly sheet rows for one technician + route type + week (editable source if present).
+ * Future technician UI: same query shape — filter by `week_start_date`, `route_type`, and
+ * `assigned_technician_slug` (fallback `technician_slug` for legacy rows); use `guest_check` for guest vs check.
+ *
+ * @param {string} weekStartDate YYYY-MM-DD
+ * @param {'turnover'|'midweek'} routeType
+ * @param {string} technicianSlug
+ */
+export async function getRouteSheetItemsForWeek(weekStartDate, routeType, technicianSlug) {
+  const w = String(weekStartDate ?? "").trim();
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  if (!w || !slug || (routeType !== "turnover" && routeType !== "midweek")) return [];
+  const sel =
+    "id,week_start_date,route_type,property_id,property_name,technician_slug,source_technician_slug,assigned_technician_slug,guest_check,pool_heat,comments,included,sent_at,created_at";
+  const base = () =>
+    supabase.from("route_sheet_items").select(sel).eq("week_start_date", w).eq("route_type", routeType);
+  const { data: byAssigned, error: errA } = await base().eq("assigned_technician_slug", slug);
+  if (errA) throw errA;
+  if (byAssigned?.length) return byAssigned;
+  const { data: legacy, error: errL } = await base().eq("technician_slug", slug);
+  if (errL) throw errL;
+  return legacy ?? [];
+}
+
+/**
+ * Which assigned technician+route_type combos have a fully-sent sheet this week (every row has `sent_at`).
+ * Keys are `${assigned_technician_slug || technician_slug}::${route_type}`.
+ * @param {string} weekStartDate YYYY-MM-DD (Saturday anchor)
+ * @returns {Promise<Record<string, boolean>>}
+ */
+export async function getRouteSheetWeekSentSnapshot(weekStartDate) {
+  const w = String(weekStartDate ?? "").trim();
+  if (!w) return {};
+  const { data, error } = await supabase
+    .from("route_sheet_items")
+    .select("technician_slug,assigned_technician_slug,route_type,sent_at")
+    .eq("week_start_date", w);
+  if (error) throw error;
+  const buckets = {};
+  for (const r of data ?? []) {
+    const assign = String(r.assigned_technician_slug ?? "").toLowerCase().trim();
+    const leg = String(r.technician_slug ?? "").toLowerCase().trim();
+    const slug = assign || leg;
+    const rt = r.route_type;
+    if (!slug || (rt !== "turnover" && rt !== "midweek")) continue;
+    const k = `${slug}::${rt}`;
+    if (!buckets[k]) buckets[k] = { total: 0, unsent: 0 };
+    buckets[k].total++;
+    if (r.sent_at == null || String(r.sent_at).trim() === "") buckets[k].unsent++;
+  }
+  /** @type {Record<string, boolean>} */
+  const map = {};
+  for (const [k, b] of Object.entries(buckets)) {
+    map[k] = b.total > 0 && b.unsent === 0;
+  }
+  return map;
+}
+
+/** Matches `public.route_sheet_items` unique constraint (PostgREST `onConflict`). */
+export const ROUTE_SHEET_ITEMS_ON_CONFLICT =
+  "week_start_date,route_type,property_id,assigned_technician_slug";
+
+/**
+ * Upsert weekly sheet rows. Does not touch `route_settings`.
+ * Technician app read path (future): filter `route_sheet_items` by `assigned_technician_slug` (or legacy `technician_slug`) + `week_start_date` + `route_type`; `guest_check` distinguishes guest vs check.
+ *
+ * @param {Record<string, unknown>[]} rows
+ */
+export async function upsertRouteSheetItemsBatch(rows) {
+  if (!rows?.length) return [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const a = rows[i]?.assigned_technician_slug;
+    if (a == null || String(a).trim() === "") {
+      throw new Error(
+        `upsertRouteSheetItemsBatch: row ${i} missing assigned_technician_slug (required for ${ROUTE_SHEET_ITEMS_ON_CONFLICT})`
+      );
+    }
+  }
+
+  console.log("[route_sheet_items] upsert", {
+    row_count: rows.length,
+    onConflict: ROUTE_SHEET_ITEMS_ON_CONFLICT,
+  });
+
+  const { data, error } = await supabase
+    .from("route_sheet_items")
+    .upsert(rows, { onConflict: ROUTE_SHEET_ITEMS_ON_CONFLICT })
+    .select();
+
+  if (error) {
+    console.error("[route_sheet_items] upsert error", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      onConflict: ROUTE_SHEET_ITEMS_ON_CONFLICT,
+    });
+    throw error;
+  }
+
+  console.log("[route_sheet_items] upsert ok", {
+    returned_row_count: data?.length ?? 0,
+    onConflict: ROUTE_SHEET_ITEMS_ON_CONFLICT,
+  });
   return data ?? [];
 }
 

@@ -139,6 +139,32 @@
   width: 100%;
 }
 
+.dayChipBtn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  min-width: 3.35rem;
+  padding: 0.35rem 0.55rem 0.4rem;
+  line-height: 1.15;
+}
+
+.dayChipDate {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.dayChipName {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.62);
+}
+
 .panelLocked {
   opacity: 0.5;
   pointer-events: none;
