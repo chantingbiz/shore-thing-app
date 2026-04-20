@@ -53,3 +53,80 @@
     animation: none;
   }
 }
+
+.spaFillRef {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.75rem 0.65rem;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.spaFillLabel {
+  display: block;
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(0, 0, 0, 0.9);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.spaFillRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.spaFillInput {
+  flex: 1 1 7rem;
+  min-width: 0;
+  min-height: 3rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.spaFillInput::placeholder {
+  color: rgba(0, 0, 0, 0.38);
+}
+
+.spaFillHint {
+  margin: 0.45rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.55);
+  line-height: 1.35;
+}
+
+.spaFillErr {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #8f1d1d;
+  line-height: 1.35;
+}
+
+.spaFillSave {
+  flex: 0 0 auto;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  color: rgba(0, 0, 0, 0.9);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.spaFillSave:disabled {
+  opacity: 0.55;
+}

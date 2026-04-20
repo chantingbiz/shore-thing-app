@@ -5,6 +5,24 @@ import {
   getEasternCalendarDateAtUtc,
 } from "./easternDate.js";
 
+/**
+ * Eastern `YYYY-MM-DD` dates in the Sat–Fri sheet week where service_logs rows are expected
+ * for a route type (turnover: Sat–Sun, midweek: Mon–Fri). Used to scope completion/progress per
+ * route instance instead of only “today”.
+ *
+ * @param {string} weekStartSaturdayYmd
+ * @param {'turnover'|'midweek'} routeType
+ * @returns {string[]}
+ */
+export function serviceDatesForRouteTypeInSheetWeek(weekStartSaturdayYmd, routeType) {
+  const w = String(weekStartSaturdayYmd ?? "").trim();
+  if (!w || (routeType !== "turnover" && routeType !== "midweek")) return [];
+  if (routeType === "turnover") {
+    return [w, addGregorianDaysToYmd(w, 1)];
+  }
+  return Array.from({ length: 5 }, (_, i) => addGregorianDaysToYmd(w, 2 + i));
+}
+
 /** Sat→Fri order; offsets match `ROUTE_DAY_KEY_OFFSET` (0 = Saturday of the active sheet week). */
 const ROUTE_SHEET_DAY_KEYS_IN_ORDER = Object.freeze([
   "saturday",

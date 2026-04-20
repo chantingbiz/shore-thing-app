@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { TECHNICIANS, getTechnicianRouteProperties } from "../../data/technicians.js";
+import {
+  TECHNICIANS,
+  getTechnicianBySlug,
+  getTechnicianRouteProperties,
+} from "../../data/technicians.js";
+import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js";
 import {
   formatActivityTime,
   getFirstActivityTimestampToday,
@@ -90,6 +95,8 @@ export default function AdminActivityPage() {
           const pair = sheetByTech[t.slug];
           const to = pair?.turnover;
           const mw = pair?.midweek;
+          const techLabel =
+            getTechnicianBySlug(t.slug)?.name ?? formatTechnicianSlugForDisplay(t.slug);
           const showRouteStats =
             operationalType === "turnover"
               ? !!to && (to.guestTotal ?? 0) + (to.checkTotal ?? 0) > 0
@@ -100,7 +107,7 @@ export default function AdminActivityPage() {
               to={`/administrator/activity/${t.slug}`}
               className={styles.cardLink}
             >
-              <p className={styles.cardTitle}>{t.name}</p>
+              <p className={styles.cardTitle}>{techLabel}</p>
               <p
                 className={
                   first != null
@@ -115,22 +122,31 @@ export default function AdminActivityPage() {
               {showRouteStats && operationalType === "turnover" && to ? (
                 <div
                   className={styles.cardRouteStats}
-                  aria-label={`Turnover route sheet for ${t.name} (today)`}
+                  aria-label={`Turnover route sheet for ${techLabel} (today)`}
                 >
                   <p className={styles.routeStatPill}>
                     {to.guestCompleted}/{to.guestTotal} guests completed
                   </p>
                   <p className={styles.routeStatPill}>
+                    {(to.guestInProgress ?? 0)}/{(to.guestTotal ?? 0)} guests in progress
+                  </p>
+                  <p className={styles.routeStatPill}>
                     {to.checkCompleted}/{to.checkTotal} checks completed
+                  </p>
+                  <p className={styles.routeStatPill}>
+                    {(to.checkInProgress ?? 0)}/{(to.checkTotal ?? 0)} checks in progress
                   </p>
                 </div>
               ) : showRouteStats && operationalType === "midweek" && mw ? (
                 <div
                   className={styles.cardRouteStats}
-                  aria-label={`Midweek route sheet for ${t.name} (today)`}
+                  aria-label={`Midweek route sheet for ${techLabel} (today)`}
                 >
                   <p className={styles.routeStatPill}>
                     {mw.guestCompleted}/{mw.guestTotal} guests completed
+                  </p>
+                  <p className={styles.routeStatPill}>
+                    {(mw.guestInProgress ?? 0)}/{(mw.guestTotal ?? 0)} guests in progress
                   </p>
                 </div>
               ) : null}

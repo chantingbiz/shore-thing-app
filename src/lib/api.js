@@ -275,6 +275,153 @@ export async function getServiceLogsForToday(techSlug) {
   return data ?? [];
 }
 
+/**
+ * Live `service_logs` rows for a technician across a calendar date span (Eastern `YYYY-MM-DD`).
+ * Used for route-type-scoped completion (turnover vs midweek) in the same sheet week.
+ *
+ * @param {string} techSlug
+ * @param {string[]} propertyIds
+ * @param {string} startDateYmd inclusive
+ * @param {string} endDateYmd inclusive
+ */
+export async function getServiceLogsForTechnicianPropertiesDateRange(
+  techSlug,
+  propertyIds,
+  startDateYmd,
+  endDateYmd
+) {
+  const slug = String(techSlug ?? "").toLowerCase().trim();
+  const ids = [...new Set((propertyIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
+  const a = String(startDateYmd ?? "").trim();
+  const b = String(endDateYmd ?? "").trim();
+  if (!slug || !ids.length || !a || !b) return [];
+  const { data, error } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("technician_slug", slug)
+    .in("property_id", ids)
+    .gte("service_date", a)
+    .lte("service_date", b);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Activity rows for a technician in a UTC half-open interval (caller supplies bounds, e.g. from
+ * {@link getEasternDayActivityBoundsUtc} spanning multiple Eastern days).
+ *
+ * @param {string} techSlug
+ * @param {string} startIso
+ * @param {string} endExclusiveIso
+ */
+export async function getActivityLogsForTechnicianUtcRange(techSlug, startIso, endExclusiveIso) {
+  const slug = String(techSlug ?? "").toLowerCase().trim();
+  if (!slug || !startIso || !endExclusiveIso) return [];
+  const { data, error } = await supabase
+    .from("activity_logs")
+    .select("technician_slug,property_id,event_type,event_label,created_at")
+    .eq("technician_slug", slug)
+    .gte("created_at", startIso)
+    .lt("created_at", endExclusiveIso)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * All technicians’ activity on one Eastern calendar day (admin read paths).
+ *
+ * @param {string} serviceDateYmd Eastern `YYYY-MM-DD`
+ */
+export async function getActivityLogsForEasternDateAllTechnicians(serviceDateYmd) {
+  const ymd = String(serviceDateYmd ?? "").trim() || getTodayEasternDate();
+  const { startIso, endExclusiveIso } = getEasternDayActivityBoundsUtc(ymd);
+  const { data, error } = await supabase
+    .from("activity_logs")
+    .select("technician_slug,property_id,created_at")
+    .gte("created_at", startIso)
+    .lt("created_at", endExclusiveIso);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Completed live `service_logs` for an Eastern service date (pre-archive).
+ *
+ * @param {string} [serviceDateYmd] defaults to Eastern today
+ */
+export async function getCompletedServiceLogsForEasternDate(serviceDateYmd) {
+  const d = String(serviceDateYmd ?? "").trim() || getTodayEasternDate();
+  const { data, error } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("service_date", d)
+    .eq("completed", true);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Recent completed live `service_logs` (pre-archive), all technicians — for admin browsing.
+ *
+ * @param {number} [limit] default 800, max 2000
+ */
+export async function getCompletedServiceLogsRecent(limit = 800) {
+  const cap = Math.min(Math.max(limit, 1), 2000);
+  const { data, error } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("completed", true)
+    .order("service_date", { ascending: false })
+    .limit(cap);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Completed live `service_logs` for one technician (pre-archive).
+ *
+ * @param {string} techSlug
+ * @param {number} [limit] default 800, max 2000
+ */
+export async function getCompletedServiceLogsForTechnician(techSlug, limit = 800) {
+  const slug = String(techSlug ?? "").toLowerCase().trim();
+  if (!slug) return [];
+  const cap = Math.min(Math.max(limit, 1), 2000);
+  const { data, error } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("technician_slug", slug)
+    .eq("completed", true)
+    .order("service_date", { ascending: false })
+    .limit(cap);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Completed live `service_logs` for one technician in an Eastern `service_date` range (inclusive).
+ *
+ * @param {string} techSlug
+ * @param {string} minYmd
+ * @param {string} maxYmd
+ */
+export async function getCompletedServiceLogsForTechnicianDateRange(techSlug, minYmd, maxYmd) {
+  const slug = String(techSlug ?? "").toLowerCase().trim();
+  const a = String(minYmd ?? "").trim();
+  const b = String(maxYmd ?? "").trim();
+  if (!slug || !a || !b) return [];
+  const { data, error } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("technician_slug", slug)
+    .eq("completed", true)
+    .gte("service_date", a)
+    .lte("service_date", b);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function logActivity(techSlug, propertyId, eventType, eventLabel) {
   console.log("Supabase write about to run", {
     property_id: propertyId,
@@ -520,7 +667,7 @@ export async function getPropertyByTechnicianAndSlug(technicianSlug, propertySlu
   if (!ts || !ps) return null;
   const { data, error } = await supabase
     .from("properties")
-    .select("id,technician_slug,property_slug,name,address,created_at")
+    .select("id,technician_slug,property_slug,name,address,created_at,spa_fill_minutes")
     .eq("technician_slug", ts)
     .eq("property_slug", ps)
     .maybeSingle();
@@ -548,7 +695,7 @@ export async function insertProperty(row) {
 
 /**
  * @param {string} propertyId
- * @param {{ name?: string, address?: string, property_slug?: string }} patch
+ * @param {{ name?: string, address?: string, property_slug?: string, spa_fill_minutes?: number }} patch
  */
 export async function updateProperty(propertyId, patch) {
   if (!propertyId) return null;
@@ -557,7 +704,7 @@ export async function updateProperty(propertyId, patch) {
     .from("properties")
     .update(payload)
     .eq("id", propertyId)
-    .select("id,technician_slug,property_slug,name,address,created_at")
+    .select("id,technician_slug,property_slug,name,address,created_at,spa_fill_minutes")
     .maybeSingle();
   if (error) throw error;
   return data;

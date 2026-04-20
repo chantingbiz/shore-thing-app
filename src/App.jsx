@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import PoolVideoBackground from "./components/PoolVideoBackground.jsx";
 import appStyles from "./App.module.css";
 import LandingPage from "./pages/LandingPage.jsx";
@@ -13,6 +13,17 @@ import AdminActivityPropertyPage from "./pages/admin/AdminActivityPropertyPage.j
 import AdminServiceHistoryPage from "./pages/admin/AdminServiceHistoryPage.jsx";
 import PropertyIncidentReportPage from "./pages/admin/PropertyIncidentReportPage.jsx";
 import RouteSheetDashboardPage from "./pages/admin/RouteSheetDashboardPage.jsx";
+import AdminCompletedSheetsPage from "./pages/admin/AdminCompletedSheetsPage.jsx";
+
+function CompletedSheetsMissingDateRedirect() {
+  const { techSlug } = useParams();
+  return (
+    <Navigate
+      to={`/administrator/completed-sheets/${encodeURIComponent(String(techSlug ?? ""))}`}
+      replace
+    />
+  );
+}
 
 export default function App() {
   return (
@@ -50,6 +61,26 @@ export default function App() {
             element={<AdminActivityDetailPage />}
           />
           <Route path="/administrator/activity" element={<AdminActivityPage />} />
+          <Route
+            path="/administrator/completed-sheets/:techSlug/:routeType/:instanceYmd/:propertyId"
+            element={<AdminCompletedSheetsPage />}
+          />
+          <Route
+            path="/administrator/completed-sheets/:techSlug/:routeType/:instanceYmd"
+            element={<AdminCompletedSheetsPage />}
+          />
+          <Route
+            path="/administrator/completed-sheets/:techSlug/:routeType"
+            element={<CompletedSheetsMissingDateRedirect />}
+          />
+          <Route
+            path="/administrator/completed-sheets/:techSlug"
+            element={<AdminCompletedSheetsPage />}
+          />
+          <Route
+            path="/administrator/completed-sheets"
+            element={<AdminCompletedSheetsPage />}
+          />
           <Route
             path="/administrator/service-history"
             element={<AdminServiceHistoryPage />}

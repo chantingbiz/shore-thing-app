@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { getTechnicianBySlug } from "../../data/technicians.js";
+import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js";
 import {
   formatActivityTime,
   getFirstActivityTimestampToday,
@@ -71,15 +72,17 @@ export default function AdminActivityDetailPage() {
     return <Navigate to="/administrator/activity" replace />;
   }
 
+  const techLabel = tech.name ?? formatTechnicianSlugForDisplay(tech.slug);
+
   if (tech.slug !== "stephen") {
     return (
       <SubpageTemplate
-        title={tech.name}
+        title={techLabel}
         backTo="/administrator/activity"
         readableDarkText
       >
         <p className={styles.placeholderNote}>
-          Activity detail for {tech.name} is not available yet. No activity data is recorded for
+          Activity detail for {techLabel} is not available yet. No activity data is recorded for
           this technician in this version.
         </p>
       </SubpageTemplate>
@@ -101,7 +104,7 @@ export default function AdminActivityDetailPage() {
 
   return (
     <SubpageTemplate
-      title={tech.name}
+      title={techLabel}
       backTo="/administrator/activity"
       readableDarkText
     >
@@ -129,7 +132,13 @@ export default function AdminActivityDetailPage() {
             {to.guestCompleted}/{to.guestTotal} guests completed
           </p>
           <p className={styles.routeStatPill}>
+            {(to.guestInProgress ?? 0)}/{(to.guestTotal ?? 0)} guests in progress
+          </p>
+          <p className={styles.routeStatPill}>
             {to.checkCompleted}/{to.checkTotal} checks completed
+          </p>
+          <p className={styles.routeStatPill}>
+            {(to.checkInProgress ?? 0)}/{(to.checkTotal ?? 0)} checks in progress
           </p>
         </div>
       ) : showRouteStats && operationalType === "midweek" && mw ? (
@@ -139,6 +148,9 @@ export default function AdminActivityDetailPage() {
         >
           <p className={styles.routeStatPill}>
             {mw.guestCompleted}/{mw.guestTotal} guests completed
+          </p>
+          <p className={styles.routeStatPill}>
+            {(mw.guestInProgress ?? 0)}/{(mw.guestTotal ?? 0)} guests in progress
           </p>
         </div>
       ) : null}

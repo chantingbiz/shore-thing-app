@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { uploadServicePhoto } from "../lib/api.js";
 import {
   ensurePropertiesBySlug,
@@ -6,7 +6,9 @@ import {
   resolveDbPropertyId,
 } from "../lib/supabaseStore.js";
 import { logTechnicianActivity } from "../utils/activityLog.js";
+import { servicePhotoItemsFromRow } from "../utils/servicePhotoSlots.js";
 import glass from "../styles/glassButtons.module.css";
+import ServicePhotoLightbox from "./ServicePhotoLightbox.jsx";
 import styles from "./ServicePhotoUploads.module.css";
 
 const SLOTS = [
@@ -62,6 +64,9 @@ export default function ServicePhotoUploads({
   const inputRefs = useRef({});
   const [busySlot, setBusySlot] = useState(null);
   const [error, setError] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(/** @type {number | null} */ (null));
+
+  const galleryItems = useMemo(() => servicePhotoItemsFromRow(serviceLogRow), [serviceLogRow]);
 
   const handlePick = useCallback(
     async (slotDef, fileList) => {
@@ -132,11 +137,12 @@ export default function ServicePhotoUploads({
 
   return (
     <section className={styles.section} aria-label="Service photos">
-      <h2 className={styles.h2}>Photos</h2>
+      <h2 className={styles.h2}>Service photos</h2>
       <div className={styles.grid}>
         {SLOTS.map((s) => {
           const url = serviceLogRow?.[s.column];
           const busy = busySlot === s.slot;
+          const trimmedUrl = url ? String(url).trim() : "";
           return (
             <div key={s.slot} className={styles.card}>
               <div className={styles.cardHead}>
@@ -162,10 +168,18 @@ export default function ServicePhotoUploads({
                   <span className={glass.btnLabel}>{busy ? "Uploading…" : url ? "Replace" : "Add photo"}</span>
                 </button>
               </div>
-              {url ? (
-                <a href={url} target="_blank" rel="noreferrer" className={styles.thumbLink}>
-                  <img src={url} alt="" className={styles.thumb} />
-                </a>
+              {trimmedUrl ? (
+                <button
+                  type="button"
+                  className={styles.thumbLink}
+                  aria-label={`View ${s.title} in gallery`}
+                  onClick={() => {
+                    const idx = galleryItems.findIndex((it) => it.url === trimmedUrl);
+                    if (idx >= 0) setLightboxIndex(idx);
+                  }}
+                >
+                  <img src={trimmedUrl} alt="" className={styles.thumb} />
+                </button>
               ) : (
                 <p className={styles.empty}>No photo yet</p>
               )}
@@ -174,6 +188,13 @@ export default function ServicePhotoUploads({
         })}
       </div>
       {error ? <p className={styles.err}>{error}</p> : null}
+      {lightboxIndex !== null && galleryItems.length ? (
+        <ServicePhotoLightbox
+          items={galleryItems}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      ) : null}
     </section>
   );
 }

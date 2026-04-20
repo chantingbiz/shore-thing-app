@@ -113,6 +113,26 @@
   text-shadow: inherit;
 }
 
+.belowBackSlot {
+  width: 100%;
+}
+
+/* Technician loading banner: below Back, above title (shared with Stephen detail + route list). */
+.subpageLoadingBanner {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.45rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: rgba(0, 0, 0, 0.72);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
 .title {
   margin: 0;
   font-size: clamp(1.75rem, 5vw, 2rem);

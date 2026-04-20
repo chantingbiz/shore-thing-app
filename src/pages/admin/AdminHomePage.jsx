@@ -47,6 +47,25 @@ function IconIncident() {
   );
 }
 
+function IconCompletedSheets() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 6h12M8 12h12M8 18h8M4 6h.02M4 12h.02M4 18h.02"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18 2v4M16 4h4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function IconHistory() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -92,6 +111,15 @@ export default function AdminHomePage() {
                   <IconActivity />
                 </span>
                 <span className={glass.btnLabel}>Today&apos;s Activity</span>
+              </Link>
+              <Link
+                to="/administrator/completed-sheets"
+                className={`${glass.glassBtn} ${glass.glassBtnFull} ${homeStyles.navLink}`}
+              >
+                <span className={homeStyles.navIcon}>
+                  <IconCompletedSheets />
+                </span>
+                <span className={glass.btnLabel}>Completed Sheets</span>
               </Link>
               <Link
                 to="/administrator/service-history"

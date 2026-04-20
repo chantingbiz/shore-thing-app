@@ -38,6 +38,12 @@ const propertiesCache = { loadedAt: 0, bySlug: new Map(), byId: new Map() };
 /** Basic protection against spamming fetch on rapid changes */
 const inflight = new Map();
 
+/** Canonical Map key for `service_logs.property_id` (UUID string). */
+function serviceLogPropertyIdKey(propertyId) {
+  if (propertyId == null) return "";
+  return String(propertyId).trim();
+}
+
 export function subscribeToSupabaseChanges() {
   const channel = supabase
     .channel("shore_realtime")
@@ -164,7 +170,9 @@ export async function ensureServiceLogsForToday(techSlug) {
     const next = new Map(prev);
     for (const r of rows) {
       if (!r?.property_id) continue;
-      next.set(r.property_id, r);
+      const key = serviceLogPropertyIdKey(r.property_id);
+      if (!key) continue;
+      next.set(key, r);
     }
     serviceLogsByTech.set(techSlug, { loadedAt: Date.now(), rowsByPropertyId: next });
     emitter.emit();
@@ -195,7 +203,9 @@ export async function ensureRouteSettings(propertyIds) {
 }
 
 export function getServiceLogRow(techSlug, propertyId) {
-  return serviceLogsByTech.get(techSlug)?.rowsByPropertyId.get(propertyId) ?? null;
+  const key = serviceLogPropertyIdKey(propertyId);
+  if (!key) return null;
+  return serviceLogsByTech.get(techSlug)?.rowsByPropertyId.get(key) ?? null;
 }
 
 export function getActivityEvents(techSlug) {
@@ -207,11 +217,12 @@ export function getRouteSettingsRow(propertyId) {
 }
 
 export async function patchServiceLog(techSlug, propertyId, patch) {
-  if (!techSlug || !propertyId) return { ok: false };
+  const idKey = serviceLogPropertyIdKey(propertyId);
+  if (!techSlug || !idKey) return { ok: false };
 
   // optimistic cache update
-  const prev = getServiceLogRow(techSlug, propertyId) ?? {
-    property_id: propertyId,
+  const prev = getServiceLogRow(techSlug, idKey) ?? {
+    property_id: idKey,
     technician_slug: techSlug,
   };
   const next = { ...prev, ...patch };
@@ -219,13 +230,13 @@ export async function patchServiceLog(techSlug, propertyId, patch) {
     loadedAt: 0,
     rowsByPropertyId: new Map(),
   };
-  block.rowsByPropertyId.set(propertyId, next);
+  block.rowsByPropertyId.set(idKey, next);
   serviceLogsByTech.set(techSlug, block);
   emitter.emit();
 
   try {
-    const saved = await upsertServiceLog(propertyId, techSlug, patch);
-    block.rowsByPropertyId.set(propertyId, saved ?? next);
+    const saved = await upsertServiceLog(idKey, techSlug, patch);
+    block.rowsByPropertyId.set(idKey, saved ?? next);
     serviceLogsByTech.set(techSlug, block);
     emitter.emit();
     return { ok: true, data: saved ?? next };

@@ -1,0 +1,282 @@
+.subHeader {
+  margin: 0 0 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.62);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
+.statsWrap {
+  margin-bottom: 0.85rem;
+}
+
+.propBlock {
+  margin-bottom: 0.65rem;
+}
+
+/* Completed Sheets — sheet list preview cards: title / badges stack cleanly on narrow screens */
+.sheetPreviewCard .propSummaryInner {
+  gap: 0.45rem;
+}
+
+.sheetPreviewCard .summaryTop {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.sheetPreviewCard .summaryName {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  line-height: 1.28;
+}
+
+.sheetPreviewCard .summaryBadges {
+  justify-content: flex-start;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  row-gap: 0.4rem;
+}
+
+.sheetPreviewCard .address {
+  margin-top: 0.12rem;
+}
+
+@media (min-width: 520px) {
+  .sheetPreviewCard .summaryTop {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.45rem 0.65rem;
+  }
+
+  .sheetPreviewCard .summaryName {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    line-height: 1.2;
+  }
+
+  .sheetPreviewCard .summaryBadges {
+    width: auto;
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    max-width: min(100%, 11.5rem);
+  }
+
+  .sheetPreviewCard .address {
+    margin-top: 0;
+  }
+}
+
+.propDetails {
+  border-radius: 1.15rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.propDetails[open] {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.propSummary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.75rem 0.9rem;
+}
+
+.propSummary::-webkit-details-marker {
+  display: none;
+}
+
+.propSummaryInner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+.summaryTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.summaryName {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: #000;
+  text-shadow: 0 2px 6px rgba(255, 255, 255, 0.8);
+  flex: 1;
+  min-width: 0;
+}
+
+.summaryBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.pill {
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  line-height: 1.2;
+}
+
+.pillGuest {
+  color: rgba(15, 62, 95, 0.95);
+  background: rgba(130, 200, 255, 0.45);
+}
+
+.pillCheck {
+  color: rgba(55, 40, 10, 0.95);
+  background: rgba(255, 210, 130, 0.45);
+}
+
+.pillDone {
+  color: rgba(15, 80, 55, 0.98);
+  background: rgba(160, 240, 200, 0.58);
+}
+
+.pillOpen {
+  color: rgba(90, 45, 15, 0.95);
+  background: rgba(255, 230, 180, 0.5);
+}
+
+.pillIp {
+  color: rgba(10, 62, 92, 0.96);
+  background: rgba(120, 210, 245, 0.45);
+}
+
+.address {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.66);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.55);
+}
+
+.thumbRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.thumb {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.35rem;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.workBody {
+  padding: 0 0.65rem 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.expandHint {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.sheetCardInner {
+  padding-bottom: 0.35rem;
+}
+
+.sheetPropertyLink {
+  display: block;
+  padding: 0.75rem 0.9rem 0.25rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.sheetGallerySlot {
+  padding: 0.35rem 0.85rem 0.75rem;
+}
+
+.sheetPhotoList {
+  margin-top: 0.15rem;
+}
+
+.propertyPageHeader {
+  padding: 0.75rem 0.9rem 0;
+}
+
+/* Completed Sheets — single property page: clearer title / badge stack on narrow viewports */
+.propertyDetailPage .propertyPageHeader {
+  gap: 0.55rem;
+  padding-bottom: 0.85rem;
+}
+
+.propertyDetailPage .workBody {
+  padding-top: 0.55rem;
+}
+
+.propertyDetailPage .summaryTop {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.propertyDetailPage .summaryName {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  font-size: 1.06rem;
+  line-height: 1.28;
+  padding-right: 0;
+}
+
+.propertyDetailPage .summaryBadges {
+  justify-content: flex-start;
+  width: 100%;
+  gap: 0.4rem;
+  row-gap: 0.45rem;
+}
+
+@media (min-width: 520px) {
+  .propertyDetailPage .summaryTop {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.55rem 0.75rem;
+  }
+
+  .propertyDetailPage .summaryName {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    font-size: 1.02rem;
+    line-height: 1.2;
+  }
+
+  .propertyDetailPage .summaryBadges {
+    width: auto;
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    max-width: min(100%, 12.5rem);
+  }
+}

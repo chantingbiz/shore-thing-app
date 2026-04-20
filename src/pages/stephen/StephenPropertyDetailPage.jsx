@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { getTechnicianBySlug } from "../../data/technicians.js";
 import {
@@ -9,6 +9,7 @@ import {
   mapWorkStateToServiceLogPatch,
   workStateFromServiceLogRow,
 } from "../../lib/api.js";
+import { getTodayEasternDate } from "../../lib/easternDate.js";
 import { getActiveRouteSheetSaturdayEastern } from "../../lib/routeSheetWeek.js";
 import PropertyHoseControls from "../../components/PropertyHoseControls.jsx";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
@@ -19,6 +20,7 @@ import { getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
 import {
   ensureServiceLogsForToday,
   getServiceLogRow,
+  onSupabaseDataChanged,
   patchServiceLog,
   primePropertiesBySlug,
   primeTechnicianToday,
@@ -29,12 +31,17 @@ import {
   isRouteSheetRowIncludedOnActiveSheet,
   isRouteSheetRowSent,
 } from "../../utils/routeSheetSentGuestCheckSummary.js";
+import {
+  fetchRouteInstanceContext,
+  pickTechnicianRouteDetailServiceLog,
+} from "../../utils/routeInstanceStatus.js";
 import { getLocalDayKey } from "../../utils/localDay.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import {
   getRouteTypeFromTechnicianPath,
   technicianRouteListPath,
 } from "../../utils/technicianRoutePaths.js";
+import layoutStyles from "../../styles/layouts.module.css";
 import styles from "./StephenPropertyDetailPage.module.css";
 
 export default function StephenPropertyDetailPage() {
@@ -50,6 +57,8 @@ export default function StephenPropertyDetailPage() {
 
   const [dbProp, setDbProp] = useState(null);
   const [dbLoading, setDbLoading] = useState(true);
+  /** Cycles 0→2 for ".", "..", "..." on the visit loading line */
+  const [loadingDotsPhase, setLoadingDotsPhase] = useState(0);
   const [routeSheetRow, setRouteSheetRow] = useState(/** @type {Record<string, unknown> | null} */ (null));
   const [sheetCheckDone, setSheetCheckDone] = useState(() => !needsRouteSheetGate);
 
@@ -67,6 +76,10 @@ export default function StephenPropertyDetailPage() {
 
   useSupabaseSyncTick();
 
+  useEffect(() => {
+    return onSupabaseDataChanged(() => setServiceLogRefreshNonce((n) => n + 1));
+  }, []);
+
   const readingsPoolSigRef = useRef(null);
   const readingsSpaSigRef = useRef(null);
   const chemPoolSigRef = useRef(null);
@@ -74,8 +87,16 @@ export default function StephenPropertyDetailPage() {
   const [, setRoutePoll] = useState(0);
 
   const [serviceLogsReady, setServiceLogsReady] = useState(false);
+  const [serviceLogRefreshNonce, setServiceLogRefreshNonce] = useState(0);
+  const [routeScopedLogRow, setRouteScopedLogRow] = useState(
+    /** @type {Record<string, unknown> | null} */ (null)
+  );
+  const [routeScopedLogReady, setRouteScopedLogReady] = useState(() => !needsRouteSheetGate);
   const baselineWorkPatchRef = useRef(null);
   const baselineRowKeyRef = useRef("");
+  /** Only clear property row when route (technician + property slug) actually changes — not on same-route refetch. */
+  const lastPropertyRouteKeyForClearRef = useRef("");
+  const propertyFetchGenerationRef = useRef(0);
 
   useEffect(() => {
     if (!technicianSlug) return;
@@ -98,13 +119,25 @@ export default function StephenPropertyDetailPage() {
   useEffect(() => {
     if (!technicianSlug || !propertySlug) return;
     let cancelled = false;
+    const routeKey = `${technicianSlug}::${String(propertySlug).toLowerCase()}`;
+    if (lastPropertyRouteKeyForClearRef.current !== routeKey) {
+      lastPropertyRouteKeyForClearRef.current = routeKey;
+      setDbProp(null);
+    }
+    const fetchGen = ++propertyFetchGenerationRef.current;
     setDbLoading(true);
-    setDbProp(null);
-    void getPropertyByTechnicianAndSlug(technicianSlug, propertySlug).then((row) => {
-      if (cancelled) return;
-      setDbProp(row);
-      setDbLoading(false);
-    });
+    void getPropertyByTechnicianAndSlug(technicianSlug, propertySlug)
+      .then((row) => {
+        if (cancelled || fetchGen !== propertyFetchGenerationRef.current) return;
+        setDbProp(row);
+        setDbLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled || fetchGen !== propertyFetchGenerationRef.current) return;
+        console.error("[technician property detail] property fetch failed", e);
+        setDbProp(null);
+        setDbLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -116,7 +149,7 @@ export default function StephenPropertyDetailPage() {
       setSheetCheckDone(true);
       return;
     }
-    if (dbLoading) {
+    if (dbLoading && !dbProp?.id) {
       setSheetCheckDone(false);
       return;
     }
@@ -155,25 +188,119 @@ export default function StephenPropertyDetailPage() {
   }, [needsRouteSheetGate, dbLoading, dbProp?.id, selectedRouteType, technicianSlug]);
 
   useEffect(() => {
+    if (!needsRouteSheetGate) {
+      setRouteScopedLogRow(null);
+      setRouteScopedLogReady(true);
+      return;
+    }
+    if (!sheetCheckDone || !dbProp?.id) {
+      setRouteScopedLogRow(null);
+      setRouteScopedLogReady(false);
+      return;
+    }
+    if (!routeSheetRow) {
+      setRouteScopedLogRow(null);
+      setRouteScopedLogReady(true);
+      return;
+    }
+    let cancelled = false;
+    /** Do not set routeScopedLogReady false here — realtime refresh (nonce) must not blank the UI while refetching. */
+    void (async () => {
+      try {
+        const week = getActiveRouteSheetSaturdayEastern();
+        const ctx = await fetchRouteInstanceContext(
+          technicianSlug,
+          week,
+          /** @type {'turnover'|'midweek'} */ (selectedRouteType),
+          [String(dbProp.id)]
+        );
+        const picked = pickTechnicianRouteDetailServiceLog({
+          technicianSlug,
+          propertyId: String(dbProp.id),
+          weekStartDate: week,
+          routeType: /** @type {'turnover'|'midweek'} */ (selectedRouteType),
+          logsByPropertyAndDate: ctx.logsByPropertyAndDate,
+        });
+        if (!cancelled) {
+          setRouteScopedLogRow(picked);
+          setRouteScopedLogReady(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setRouteScopedLogRow(null);
+          setRouteScopedLogReady(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    needsRouteSheetGate,
+    sheetCheckDone,
+    dbProp?.id,
+    routeSheetRow,
+    technicianSlug,
+    selectedRouteType,
+    serviceLogRefreshNonce,
+  ]);
+
+  useEffect(() => {
     if (!property) return;
     primePropertiesBySlug([property.slug]);
     primeTechnicianToday(technicianSlug, []);
   }, [property, technicianSlug]);
 
   const resolved = property ? resolveDbPropertyId(property.slug) : null;
-  const serviceLogRow = resolved ? getServiceLogRow(technicianSlug, resolved) : null;
+  const cachedTodayRow = resolved ? getServiceLogRow(technicianSlug, resolved) : null;
+  const effectiveServiceLogRow = useMemo(() => {
+    if (!resolved) return null;
+    if (needsRouteSheetGate) {
+      if (!routeScopedLogReady) return null;
+      return routeScopedLogRow ?? cachedTodayRow;
+    }
+    return cachedTodayRow;
+  }, [
+    resolved,
+    needsRouteSheetGate,
+    routeScopedLogReady,
+    routeScopedLogRow,
+    cachedTodayRow,
+    technicianSlug,
+  ]);
+
+  const combinedLogsReady =
+    serviceLogsReady && (!needsRouteSheetGate || routeScopedLogReady);
+
+  const slugForUi = property?.slug ?? propertySlug ?? "";
+  const visitDataLoading =
+    Boolean(property) && !combinedLogsReady && Boolean(slugForUi);
+  const propertyFetchLoading =
+    dbLoading && !property && Boolean(propertySlug);
+  const loadingVisitUiActive = visitDataLoading || propertyFetchLoading;
+
+  useEffect(() => {
+    if (!loadingVisitUiActive) {
+      setLoadingDotsPhase(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setLoadingDotsPhase((p) => (p + 1) % 3);
+    }, 450);
+    return () => clearInterval(id);
+  }, [loadingVisitUiActive]);
 
   useEffect(() => {
     baselineRowKeyRef.current = "";
   }, [propertySlug, technicianSlug]);
 
   useEffect(() => {
-    if (!serviceLogsReady || !resolved || !property) return;
-    const rowKey = `${technicianSlug}:${property.slug}:${serviceLogRow?.id ?? "none"}`;
+    if (!combinedLogsReady || !resolved || !property) return;
+    const rowKey = `${technicianSlug}:${property.slug}:${effectiveServiceLogRow?.id ?? "none"}`;
     if (baselineRowKeyRef.current === rowKey && baselineWorkPatchRef.current != null) return;
     baselineRowKeyRef.current = rowKey;
-    if (serviceLogRow) {
-      const ws = workStateFromServiceLogRow(serviceLogRow);
+    if (effectiveServiceLogRow) {
+      const ws = workStateFromServiceLogRow(effectiveServiceLogRow);
       baselineWorkPatchRef.current = ws
         ? mapWorkStateToServiceLogPatch({
             pool: ws.pool,
@@ -186,17 +313,27 @@ export default function StephenPropertyDetailPage() {
       baselineWorkPatchRef.current = emptyServiceLogWorkPatch();
     }
   }, [
-    serviceLogsReady,
+    combinedLogsReady,
     resolved,
     property?.slug,
     technicianSlug,
-    serviceLogRow,
-    serviceLogRow?.id,
+    effectiveServiceLogRow,
+    effectiveServiceLogRow?.id,
   ]);
 
   const handleWorkStateChange = useCallback(
     async (state) => {
       if (!property) return;
+      if (needsRouteSheetGate) {
+        const sd = effectiveServiceLogRow?.service_date;
+        if (
+          sd != null &&
+          String(sd).trim() &&
+          String(sd).trim() !== getTodayEasternDate()
+        ) {
+          return;
+        }
+      }
       const prop = property;
 
       primePropertiesBySlug([prop.slug]);
@@ -280,7 +417,7 @@ export default function StephenPropertyDetailPage() {
         });
       }
     },
-    [property, technicianSlug]
+    [property, technicianSlug, needsRouteSheetGate, effectiveServiceLogRow]
   );
 
   if (!technician) {
@@ -307,7 +444,10 @@ export default function StephenPropertyDetailPage() {
     property?.name ??
     (propertySlug ? String(propertySlug).replace(/-/g, " ") : "Property");
   const displaySubtitle = property?.address ?? "";
-  const slugForUi = property?.slug ?? propertySlug ?? "";
+
+  const loadingVisitDataLabel = `Loading visit data${".".repeat(
+    loadingDotsPhase + 1
+  )}`;
 
   return (
     <SubpageTemplate
@@ -315,6 +455,18 @@ export default function StephenPropertyDetailPage() {
       subtitle={displaySubtitle || undefined}
       backTo={listPath}
       readableDarkText
+      belowBack={
+        propertyFetchLoading || visitDataLoading ? (
+          <p
+            className={layoutStyles.subpageLoadingBanner}
+            role="status"
+            aria-live="polite"
+            aria-label="Loading visit data"
+          >
+            {loadingVisitDataLabel}
+          </p>
+        ) : null
+      }
     >
       <div className={styles.body}>
         {property && slugForUi ? (
@@ -329,18 +481,26 @@ export default function StephenPropertyDetailPage() {
               technicianSlug={technicianSlug}
               propertyName={property.name}
               enableActivityLog
+              propertyId={dbProp?.id != null ? String(dbProp.id) : ""}
+              spaFillMinutes={dbProp?.spa_fill_minutes}
+              onPropertySpaFillUpdated={(row) => {
+                setDbProp((prev) => (prev && row ? { ...prev, ...row } : prev));
+                /** Avoid primePropertiesBySlug here: it emits supabaseStore → detail's nonce refreshes
+                 *  and was clearing routeScopedLogReady mid-refetch, blanking readings/photos momentarily. */
+              }}
             />
             <ServicePhotoUploads
               propertySlug={slugForUi}
               propertyName={property.name}
               technicianSlug={technicianSlug}
-              serviceLogRow={serviceLogRow}
+              serviceLogRow={effectiveServiceLogRow}
             />
             <ReadingsForm
+              key={`${slugForUi}:${effectiveServiceLogRow?.id ?? "none"}:${String(effectiveServiceLogRow?.service_date ?? "")}`}
               idPrefix={slugForUi}
               onWorkStateChange={handleWorkStateChange}
-              serviceLogRow={serviceLogRow}
-              serviceLogsReady={serviceLogsReady}
+              serviceLogRow={effectiveServiceLogRow}
+              serviceLogsReady={combinedLogsReady}
             />
           </>
         ) : null}

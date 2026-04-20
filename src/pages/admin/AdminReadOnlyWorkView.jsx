@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { poolTempAfterFromRow, spaTempAfterFromRow } from "../../lib/api.js";
+import ServicePhotoGallery from "../../components/ServicePhotoGallery.jsx";
+import galleryStyles from "../../components/ServicePhotoGallery.module.css";
+import { servicePhotoItemsFromRow } from "../../utils/servicePhotoSlots.js";
 import { formatHoseElapsed, getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
 import styles from "./AdminReadOnlyWorkView.module.css";
 
@@ -59,13 +62,18 @@ export default function AdminReadOnlyWorkView({
   serviceLog,
   techSlug,
   propertySlug,
+  /** When true, hide live hose timers (historical / completed-sheets snapshot). */
+  snapshotMode = false,
+  /** When true, center the Service photos thumbnail row (Completed Sheets property detail). */
+  centerServicePhotos = false,
 }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (snapshotMode) return undefined;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [snapshotMode]);
 
   const pool = {
     tb: { before: serviceLog?.pool_tb_before, after: serviceLog?.pool_tb_after },
@@ -98,16 +106,11 @@ export default function AdminReadOnlyWorkView({
     ta: serviceLog?.spa_ta_added,
   };
 
-  const servicePhotoSlots = [
-    ["Pool · before", serviceLog?.pool_before_photo_url],
-    ["Pool · after", serviceLog?.pool_after_photo_url],
-    ["Spa · before", serviceLog?.spa_before_photo_url],
-    ["Spa · after", serviceLog?.spa_after_photo_url],
-  ];
-  const hasServicePhotos = servicePhotoSlots.some(([, url]) => url);
+  const servicePhotoItems = servicePhotoItemsFromRow(serviceLog);
+  const hasServicePhotos = servicePhotoItems.length > 0;
 
-  const poolTs = getPoolStart(techSlug, propertySlug);
-  const spaTs = getSpaStart(techSlug, propertySlug);
+  const poolTs = snapshotMode ? null : getPoolStart(techSlug, propertySlug);
+  const spaTs = snapshotMode ? null : getSpaStart(techSlug, propertySlug);
   const poolRun =
     poolTs != null
       ? formatHoseElapsed(Math.floor((now - poolTs) / 1000))
@@ -119,21 +122,37 @@ export default function AdminReadOnlyWorkView({
 
   return (
     <div className={styles.wrap}>
-      <section className={styles.section}>
-        <h2 className={styles.h2}>Hoses (live)</h2>
-        <div className={styles.hoseLine}>
-          <span className={styles.hoseLab}>Pool</span>
-          <span className={styles.hoseVal}>
-            {poolTs != null ? `Running · ${poolRun}` : "Not running"}
-          </span>
-        </div>
-        <div className={styles.hoseLine}>
-          <span className={styles.hoseLab}>Spa</span>
-          <span className={styles.hoseVal}>
-            {spaTs != null ? `Running · ${spaRun}` : "Not running"}
-          </span>
-        </div>
-      </section>
+      {!snapshotMode ? (
+        <section className={styles.section}>
+          <h2 className={styles.h2}>Hoses (live)</h2>
+          <div className={styles.hoseLine}>
+            <span className={styles.hoseLab}>Pool</span>
+            <span className={styles.hoseVal}>
+              {poolTs != null ? `Running · ${poolRun}` : "Not running"}
+            </span>
+          </div>
+          <div className={styles.hoseLine}>
+            <span className={styles.hoseLab}>Spa</span>
+            <span className={styles.hoseVal}>
+              {spaTs != null ? `Running · ${spaRun}` : "Not running"}
+            </span>
+          </div>
+        </section>
+      ) : null}
+
+      {hasServicePhotos ? (
+        <section
+          className={`${styles.section} ${centerServicePhotos ? styles.servicePhotosSectionCenter : ""}`}
+        >
+          <h2 className={`${styles.h2} ${centerServicePhotos ? styles.servicePhotosH2Center : ""}`}>
+            Service photos
+          </h2>
+          <ServicePhotoGallery
+            items={servicePhotoItems}
+            className={centerServicePhotos ? galleryStyles.wrapCentered : undefined}
+          />
+        </section>
+      ) : null}
 
       <section className={styles.section}>
         <h2 className={styles.h2}>Pool Readings</h2>
@@ -201,24 +220,14 @@ export default function AdminReadOnlyWorkView({
         ))}
       </section>
 
-      {hasServicePhotos ? (
-        <section className={styles.section}>
-          <h2 className={styles.h2}>Service photos</h2>
-          <div className={styles.photoRow}>
-            {servicePhotoSlots.map(([lab, url]) =>
-              url ? (
-                <a key={lab} href={url} target="_blank" rel="noreferrer" className={styles.photoCell}>
-                  <span className={styles.photoLab}>{lab}</span>
-                  <img src={url} alt="" className={styles.photoImg} />
-                </a>
-              ) : null
-            )}
-          </div>
-        </section>
-      ) : null}
-
       <p className={styles.saved}>
-        {serviceLog ? "Service log loaded for today." : "No service log for today yet."}
+        {snapshotMode
+          ? serviceLog
+            ? "Historical service log (read-only)."
+            : "No service log rows for this visit window."
+          : serviceLog
+            ? "Service log loaded for today."
+            : "No service log for today yet."}
       </p>
     </div>
   );

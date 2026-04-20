@@ -17,7 +17,13 @@ import {
   getRouteSheetWeekLabel,
 } from "../../lib/routeSheetWeek.js";
 import { resetSupabaseCaches } from "../../lib/supabaseStore.js";
-import { isRouteSheetRowIncludedOnActiveSheet } from "../../utils/routeSheetSentGuestCheckSummary.js";
+import { getTechnicianBySlug } from "../../data/technicians.js";
+import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js";
+import {
+  fetchRouteSheetSentGuestCheckSummary,
+  isRouteSheetRowIncludedOnActiveSheet,
+  isSentSheetFullyArchiveReady,
+} from "../../utils/routeSheetSentGuestCheckSummary.js";
 import styles from "./RouteSheetDashboardPage.module.css";
 import {
   ROUTE_CALENDAR_DAYS,
@@ -100,8 +106,8 @@ function mapRouteSheetItemToDashboardRow(item, propertyRow) {
  */
 const TECHNICIAN_NEEDS_SHEET_PLACEHOLDER = null;
 
-function techDisplayName(slug) {
-  return ROUTE_SHEET_TECHNICIANS.find((t) => t.slug === slug)?.name ?? slug;
+function technicianUiLabel(slug) {
+  return getTechnicianBySlug(slug)?.name ?? formatTechnicianSlugForDisplay(slug);
 }
 
 function rowVisualClass(prop, dayKey, included) {
@@ -127,20 +133,28 @@ function defaultSheetTypeForTechnician(weekSentSnapshot, slug) {
   return weekSentSnapshot[`${slug}::turnover`] ? "midweek" : "turnover";
 }
 
-/**
- * Sheets to show in the archive preview (consolidated labels).
- * Uses `route_sheet_items` sent snapshot for the active Saturday-based sheet week.
- */
-function getArchivePreviewFromWeekSnapshot(weekSentSnapshot) {
-  const rows = [];
-  for (const t of ROUTE_SHEET_TECHNICIANS) {
-    for (const st of ROUTE_SHEET_TYPES) {
-      const key = `${t.slug}::${st.key}`;
-      if (!weekSentSnapshot[key]) continue;
-      rows.push({ key, label: `${t.name} ${st.label}` });
-    }
-  }
-  return rows;
+/** @param {string} key e.g. `stephen::turnover` */
+function parseWeekSentInstanceKey(key) {
+  const parts = String(key).split("::");
+  if (parts.length !== 2) return null;
+  const slug = String(parts[0] ?? "").trim().toLowerCase();
+  const rt = String(parts[1] ?? "").trim().toLowerCase();
+  if (!slug) return null;
+  if (rt !== "turnover" && rt !== "midweek") return null;
+  return { slug, routeType: /** @type {'turnover' | 'midweek'} */ (rt) };
+}
+
+/** Sent `slug::route_type` keys from the week snapshot (database-driven list). */
+function sentSheetInstanceKeysFromSnapshot(snap) {
+  return Object.entries(snap ?? {})
+    .filter(([, v]) => !!v)
+    .map(([k]) => k)
+    .filter((k) => parseWeekSentInstanceKey(k) != null)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function routeTypeLabel(routeType) {
+  return routeType === "turnover" ? "Turnover" : "Midweek";
 }
 
 /** Auto-growing comments field; height follows content (no inner scroll). */
@@ -203,6 +217,13 @@ export default function RouteSheetDashboardPage() {
   const [activeSheetType, setActiveSheetType] = useState(/** @type {'turnover' | 'midweek'} */ ("turnover"));
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [archiveStatus, setArchiveStatus] = useState(/** @type {{ kind: 'ok' | 'error', message: string } | null} */ (null));
+  /** DB-derived archive readiness per sent sheet instance (`slug::route_type`). */
+  const [archivePanelState, setArchivePanelState] = useState(
+    /** @type {{ loading: boolean, rows: { key: string, label: string, ready: boolean, loadError: string | null }[] }} */ ({
+      loading: false,
+      rows: [],
+    })
+  );
 
   const refreshWeekSnapshot = useCallback(async () => {
     try {
@@ -218,6 +239,50 @@ export default function RouteSheetDashboardPage() {
   useEffect(() => {
     void refreshWeekSnapshot();
   }, [refreshWeekSnapshot]);
+
+  useEffect(() => {
+    const keys = sentSheetInstanceKeysFromSnapshot(weekSentSnapshot);
+    if (!keys.length) {
+      setArchivePanelState({ loading: false, rows: [] });
+      return;
+    }
+    let cancelled = false;
+    setArchivePanelState({ loading: true, rows: [] });
+    void (async () => {
+      const rows = await Promise.all(
+        keys.map(async (key) => {
+          const parsed = parseWeekSentInstanceKey(key);
+          if (!parsed) return null;
+          const { slug, routeType } = parsed;
+          const techName = technicianUiLabel(slug);
+          const label = `${techName} ${routeTypeLabel(routeType)}`;
+          try {
+            const summary = await fetchRouteSheetSentGuestCheckSummary(slug, routeType, {
+              weekStartDate,
+            });
+            if (cancelled) return null;
+            return {
+              key,
+              label,
+              ready: isSentSheetFullyArchiveReady(summary),
+              loadError: null,
+            };
+          } catch (e) {
+            const msg = e?.message ? String(e.message) : String(e);
+            return { key, label, ready: false, loadError: msg };
+          }
+        })
+      );
+      if (cancelled) return;
+      setArchivePanelState({
+        loading: false,
+        rows: rows.filter(Boolean),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [weekSentSnapshot, weekStartDate, sheetReloadNonce]);
 
   useEffect(() => {
     if (!technicianSlug) {
@@ -434,7 +499,7 @@ export default function RouteSheetDashboardPage() {
     !sheetLoadBusy &&
     !sheetLoadError;
   const dayLabel = ROUTE_CALENDAR_DAYS.find((d) => d.key === dayKey)?.label ?? "";
-  const techName = technicianSlug ? techDisplayName(technicianSlug) : "";
+  const techName = technicianSlug ? technicianUiLabel(technicianSlug) : "";
   const sheetTypeLabel =
     activeSheetType === "turnover" ? "Turnover" : activeSheetType === "midweek" ? "Midweek" : "";
 
@@ -575,11 +640,9 @@ export default function RouteSheetDashboardPage() {
     [weekSentSnapshot]
   );
 
-  const archivePreviewSheets = useMemo(
-    () => getArchivePreviewFromWeekSnapshot(weekSentSnapshot),
-    [weekSentSnapshot]
-  );
-  const canArchive = archivePreviewSheets.length > 0 && !archiveBusy;
+  const archivePreviewRows = archivePanelState.rows;
+  const canArchive =
+    archivePreviewRows.length > 0 && !archiveBusy && !archivePanelState.loading;
 
   const openRouteFromStatus = (slug, typeKey) => {
     setTechnicianSlug(slug);
@@ -588,12 +651,13 @@ export default function RouteSheetDashboardPage() {
   };
 
   const handleArchive = async () => {
-    if (archivePreviewSheets.length === 0) return;
-    const sheetKeys = archivePreviewSheets.map((s) => s.key);
-    const labelSummary = archivePreviewSheets.map((s) => s.label).join(", ");
+    if (archivePreviewRows.length === 0) return;
+    const labelSummary = archivePreviewRows
+      .map((s) => `${s.label} (${s.ready ? "ready" : "not ready"})`)
+      .join(", ");
     const ok = window.confirm(
       "Archive completed jobs for today?\n\n" +
-        `Sheets marked sent (${weekLabel}): ${labelSummary}\n\n` +
+        `Sent sheets (${weekLabel}): ${labelSummary}\n\n` +
         "Completed visits are saved to service history, then removed from today’s live list. " +
         "Incomplete jobs are not affected."
     );
@@ -685,7 +749,7 @@ export default function RouteSheetDashboardPage() {
                       className={`${styles.segmentBtn} ${technicianSlug === t.slug ? styles.workflowSelectActive : ""}`}
                       onClick={() => selectPendingTechnician(t.slug)}
                     >
-                      {t.name}
+                      {technicianUiLabel(t.slug)}
                     </button>
                   ))
                 )}
@@ -919,7 +983,7 @@ export default function RouteSheetDashboardPage() {
                       onClick={() => openRouteFromStatus(t.slug, st.key)}
                     >
                       <span className={styles.statusLabel}>
-                        {t.name} — {st.label}
+                        {technicianUiLabel(t.slug)} — {st.label}
                       </span>
                       <span className={`${styles.pill} ${sent ? styles.pillSent : styles.pillPending}`}>
                         {sent ? "Sent" : "Not sent"}
@@ -941,17 +1005,24 @@ export default function RouteSheetDashboardPage() {
               End-of-day: move completed visits into archived service history. Preview lists route types marked{" "}
               <strong>Sent</strong> for {weekLabel}.
             </p>
-            {archivePreviewSheets.length > 0 ? (
+            {archivePanelState.loading ? (
+              <p className={styles.archiveEmpty}>Checking completion status…</p>
+            ) : archivePreviewRows.length > 0 ? (
               <ul className={styles.archivePreviewList}>
-                {archivePreviewSheets.map((s) => (
+                {archivePreviewRows.map((s) => (
                   <li key={s.key} className={styles.archivePreviewRow}>
                     <span className={styles.archivePreviewLabel}>{s.label}</span>
-                    <span className={`${styles.pill} ${styles.pillSent}`}>Ready</span>
+                    <span
+                      className={`${styles.pill} ${s.ready ? styles.pillSent : styles.pillPending}`}
+                      title={s.loadError ? s.loadError : undefined}
+                    >
+                      {s.ready ? "Ready" : "Not ready"}
+                    </span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className={styles.archiveEmpty}>No completed sheets ready to archive.</p>
+              <p className={styles.archiveEmpty}>No sent sheets for this week.</p>
             )}
             <button
               type="button"

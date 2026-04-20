@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRouteSheetItemsForWeek } from "../../lib/api.js";
-import { getActiveRouteSheetSaturdayEastern } from "../../lib/routeSheetWeek.js";
+import { getTodayEasternDate } from "../../lib/easternDate.js";
+import {
+  getActiveRouteSheetSaturdayEastern,
+  serviceDatesForRouteTypeInSheetWeek,
+} from "../../lib/routeSheetWeek.js";
 import {
   ensurePropertiesById,
   ensurePropertiesBySlug,
@@ -22,10 +26,15 @@ import {
   getSpaStart,
 } from "../../utils/hoseTimers.js";
 import { logTechnicianActivity } from "../../utils/activityLog.js";
+import { setPropertyCompletedForDay } from "../../utils/propertyCompletion.js";
 import {
-  isPropertyCompletedToday,
-  setPropertyCompletedForDay,
-} from "../../utils/propertyCompletion.js";
+  ROUTE_CARD_BADGE_LIVE,
+  fetchRouteInstanceContext,
+  getRouteCardBadgeLabel,
+  getRouteInstanceStatus,
+  mergeRealtimeTodayServiceLogsIntoIndex,
+  routeListSortTier,
+} from "../../utils/routeInstanceStatus.js";
 import { technicianPropertyDetailPath } from "../../utils/technicianRoutePaths.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
@@ -47,15 +56,6 @@ const TECH_SLUG = "stephen";
  * }} RouteListEntry
  */
 
-/** Sort: uncompleted guests → uncompleted checks → completed guests → completed checks; tiebreaker sheetOrder. */
-function routeCardSortRank(entry, completed) {
-  const isGuest = entry.isGuest;
-  if (!completed && isGuest) return 0;
-  if (!completed && !isGuest) return 1;
-  if (completed && isGuest) return 2;
-  return 3;
-}
-
 /**
  * Stephen route sheet property list: order and membership from sent `route_sheet_items` only.
  *
@@ -68,6 +68,10 @@ export default function StephenRoutePropertyList({ routeType }) {
   const [routeList, setRouteList] = useState(/** @type {RouteListEntry[]} */ ([]));
   const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
   const [routeSheetLoading, setRouteSheetLoading] = useState(true);
+  /** Route-scoped status per property slug (completion / live hose / in-progress work). */
+  const [instanceBySlug, setInstanceBySlug] = useState(
+    /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean }>} */ ({})
+  );
 
   const loadRouteSheet = useCallback(async () => {
     const week = getActiveRouteSheetSaturdayEastern();
@@ -156,17 +160,78 @@ export default function StephenRoutePropertyList({ routeType }) {
     void ensurePropertiesBySlug(slugs);
   }, [routeList]);
 
+  useEffect(() => {
+    if (!routeList.length) {
+      setInstanceBySlug({});
+      return;
+    }
+    let cancelled = false;
+    const week = getActiveRouteSheetSaturdayEastern();
+    const ids = routeList.map((p) => String(p.id ?? "").trim()).filter(Boolean);
+    void (async () => {
+      try {
+        const { logsByPropertyAndDate, activityDatesByProperty } = await fetchRouteInstanceContext(
+          TECH_SLUG,
+          week,
+          routeType,
+          ids
+        );
+        mergeRealtimeTodayServiceLogsIntoIndex(TECH_SLUG, logsByPropertyAndDate, ids);
+        if (cancelled) return;
+        const todayY = getTodayEasternDate();
+        /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean }>} */
+        const next = {};
+        for (const p of routeList) {
+          next[p.slug] = getRouteInstanceStatus({
+            propertyId: String(p.id ?? "").trim(),
+            weekStartDate: week,
+            routeType,
+            logsByPropertyAndDate,
+            activityDatesByProperty,
+            todayRowOverride: null,
+            todayEasternYmd: todayY,
+          });
+        }
+        setInstanceBySlug(next);
+      } catch (e) {
+        console.error("[technician route list] instance status failed", e);
+        if (!cancelled) setInstanceBySlug({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeList, routeType, refreshTick]);
+
   const sorted = useMemo(() => {
     void refreshTick;
     return [...routeList].sort((a, b) => {
-      const ca = isPropertyCompletedToday(TECH_SLUG, a.slug);
-      const cb = isPropertyCompletedToday(TECH_SLUG, b.slug);
-      const ra = routeCardSortRank(a, ca);
-      const rb = routeCardSortRank(b, cb);
+      const sa = instanceBySlug[a.slug] ?? {
+        isCompleted: false,
+        isLive: false,
+        isInProgress: false,
+      };
+      const sb = instanceBySlug[b.slug] ?? {
+        isCompleted: false,
+        isLive: false,
+        isInProgress: false,
+      };
+      const ra = routeListSortTier({
+        isGuest: a.isGuest,
+        isCompleted: sa.isCompleted,
+        isLive: sa.isLive,
+        isInProgress: sa.isInProgress,
+      });
+      const rb = routeListSortTier({
+        isGuest: b.isGuest,
+        isCompleted: sb.isCompleted,
+        isLive: sb.isLive,
+        isInProgress: sb.isInProgress,
+      });
       if (ra !== rb) return ra - rb;
       return a.sheetOrder - b.sheetOrder;
     });
-  }, [routeList, refreshTick]);
+  }, [routeList, refreshTick, instanceBySlug, routeType]);
 
   const handleRefresh = useCallback(() => {
     setRefreshTick((n) => n + 1);
@@ -177,7 +242,8 @@ export default function StephenRoutePropertyList({ routeType }) {
     e.preventDefault();
     e.stopPropagation();
     flushPendingWorkNow();
-    const next = !isPropertyCompletedToday(TECH_SLUG, p.slug);
+    const st = instanceBySlug[p.slug];
+    const next = !(st?.isCompleted ?? false);
     setPropertyCompletedForDay(TECH_SLUG, p.slug, next);
     if (next) {
       logTechnicianActivity(TECH_SLUG, {
@@ -188,10 +254,13 @@ export default function StephenRoutePropertyList({ routeType }) {
       });
     }
     setRefreshTick((n) => n + 1);
-  }, []);
+  }, [instanceBySlug]);
 
   const titleSuffix = routeType === "turnover" ? "Turnover" : "Midweek";
   const showEmptyMessage = !routeSheetLoading && !loadError && sorted.length === 0;
+  const weekAnchor = getActiveRouteSheetSaturdayEastern();
+  const routeServiceDates = serviceDatesForRouteTypeInSheetWeek(weekAnchor, routeType);
+  const todayInRouteWindow = routeServiceDates.includes(getTodayEasternDate());
 
   return (
     <SubpageTemplate
@@ -224,7 +293,13 @@ export default function StephenRoutePropertyList({ routeType }) {
             const poolSec = poolTs != null ? elapsedSecondsSince(poolTs, now) : null;
             const spaSec = spaTs != null ? elapsedSecondsSince(spaTs, now) : null;
             const hasActive = poolSec != null || spaSec != null;
-            const completed = isPropertyCompletedToday(TECH_SLUG, p.slug);
+            const st = instanceBySlug[p.slug] ?? {
+              isCompleted: false,
+              isLive: false,
+              isInProgress: false,
+            };
+            const completed = st.isCompleted;
+            const badgeLabel = getRouteCardBadgeLabel(st);
 
             return (
               <div
@@ -242,18 +317,35 @@ export default function StephenRoutePropertyList({ routeType }) {
                       <span className={styles.cardName}>{p.name}</span>
                     </div>
                     <div className={styles.cardTopRight}>
-                      {hasActive ? (
-                        <span className={styles.liveBadge} aria-hidden>
-                          Live
-                        </span>
-                      ) : null}
+                      <div className={styles.cardBadges}>
+                        {badgeLabel ? (
+                          <span
+                            className={
+                              badgeLabel === ROUTE_CARD_BADGE_LIVE
+                                ? styles.liveBadge
+                                : styles.inProgressBadge
+                            }
+                            aria-hidden
+                          >
+                            {badgeLabel}
+                          </span>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        className={`${glass.glassBtn} ${styles.jobGlassBtn}`}
+                        className={`${glass.glassBtn} ${styles.jobGlassBtn} ${
+                          !todayInRouteWindow ? styles.jobGlassBtnDisabled : ""
+                        }`}
                         aria-label={
                           completed
                             ? "Reopen job — mark property not completed for today"
                             : "Finish job — mark property completed for today"
+                        }
+                        disabled={!todayInRouteWindow}
+                        title={
+                          !todayInRouteWindow
+                            ? "Finish / reopen is only available on scheduled days for this route sheet."
+                            : undefined
                         }
                         onClick={(e) => toggleCompleted(p, e)}
                       >

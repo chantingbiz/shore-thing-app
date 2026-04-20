@@ -9,6 +9,8 @@ export default function SubpageTemplate({
   readableDarkText = false,
   /** Wider max-width for desktop admin tools (e.g. route sheet dashboard). */
   wideLayout = false,
+  /** Optional content directly under the Back link and above the title block (e.g. loading status). */
+  belowBack = null,
 }) {
   const titleClass = readableDarkText
     ? `${layout.title} ${layout.titleReadableDark}`
@@ -31,6 +33,7 @@ export default function SubpageTemplate({
           </span>
           Back
         </Link>
+        {belowBack ? <div className={layout.belowBackSlot}>{belowBack}</div> : null}
         <div className={layout.titleBlock}>
           <h1 className={titleClass}>{title}</h1>
           {subtitle ? <p className={subtitleClass}>{subtitle}</p> : null}

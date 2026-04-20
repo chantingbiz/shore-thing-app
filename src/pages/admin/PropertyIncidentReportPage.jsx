@@ -10,6 +10,8 @@ import {
   normalizeIncidentServiceRow,
   turnoverAfterPhotoUrl,
 } from "../../utils/incidentReportNormalize.js";
+import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js";
+import ServicePhotoGallery from "../../components/ServicePhotoGallery.jsx";
 import glass from "../../styles/glassButtons.module.css";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import pageStyles from "./PropertyIncidentReportPage.module.css";
@@ -116,25 +118,41 @@ function ChemList({ water, workState }) {
   );
 }
 
-function PhotoSlot({ label, url }) {
-  return (
-    <div className={pageStyles.photoWrap}>
-      <p className={pageStyles.photoLab}>{label}</p>
-      {url ? (
-        <a href={url} target="_blank" rel="noreferrer">
-          <img src={url} alt="" className={pageStyles.photo} />
-        </a>
-      ) : (
-        <p className={pageStyles.photoEmpty}>No photo on file</p>
-      )}
-    </div>
-  );
-}
-
 function sourceLabel(source) {
   if (source === "service_logs") return "Live log";
   if (source === "service_history") return "Archived history";
   return "—";
+}
+
+/** @param {'pool'|'spa'} water */
+function turnoverGalleryItems(water, turnoverNorm) {
+  const u = turnoverAfterPhotoUrl(water, turnoverNorm);
+  if (!u) return [];
+  return [{ label: water === "pool" ? "Pool · after" : "Spa · after", url: u }];
+}
+
+/** @param {'pool'|'spa'} water */
+function midweekGalleryItems(water, midweekNorm) {
+  /** @type {{ label: string, url: string }[]} */
+  const items = [];
+  const b = midweekBeforePhotoUrl(water, midweekNorm);
+  const a = midweekAfterPhotoUrl(water, midweekNorm);
+  if (b) items.push({ label: water === "pool" ? "Pool · before" : "Spa · before", url: b });
+  if (a) items.push({ label: water === "pool" ? "Pool · after" : "Spa · after", url: a });
+  return items;
+}
+
+/** @param {{ items: { label: string, url: string }[] }} props */
+function IncidentServicePhotoRow({ items }) {
+  if (!items.length) {
+    return <p className={pageStyles.photoEmpty}>No photo on file</p>;
+  }
+  return (
+    <section className={pageStyles.incidentPhotoSection} aria-label="Service photos">
+      <h4 className={pageStyles.photoSectionHeading}>Service photos</h4>
+      <ServicePhotoGallery items={items} />
+    </section>
+  );
 }
 
 export default function PropertyIncidentReportPage() {
@@ -358,15 +376,17 @@ export default function PropertyIncidentReportPage() {
               </p>
             ) : (
               <>
-                <p className={pageStyles.meta}>
-                  Technician: <strong>{turnoverNorm.technicianSlug || "—"}</strong>
-                </p>
                 <div className={pageStyles.photoRow}>
-                  <PhotoSlot
-                    label={water === "pool" ? "Pool · after" : "Spa · after"}
-                    url={turnoverAfterPhotoUrl(water, turnoverNorm)}
-                  />
+                  <IncidentServicePhotoRow items={turnoverGalleryItems(water, turnoverNorm)} />
                 </div>
+                <p className={pageStyles.meta}>
+                  Technician:{" "}
+                  <strong>
+                    {turnoverNorm.technicianSlug
+                      ? formatTechnicianSlugForDisplay(turnoverNorm.technicianSlug)
+                      : "—"}
+                  </strong>
+                </p>
                 <ReadingsTable water={water} workState={turnoverNorm.workState} />
                 <p className={pageStyles.muted} style={{ marginTop: "0.5rem" }}>
                   Chemicals added
@@ -388,19 +408,17 @@ export default function PropertyIncidentReportPage() {
               </p>
             ) : (
               <>
-                <p className={pageStyles.meta}>
-                  Technician: <strong>{midweekNorm.technicianSlug || "—"}</strong>
-                </p>
                 <div className={pageStyles.photoRow}>
-                  <PhotoSlot
-                    label={water === "pool" ? "Pool · before" : "Spa · before"}
-                    url={midweekBeforePhotoUrl(water, midweekNorm)}
-                  />
-                  <PhotoSlot
-                    label={water === "pool" ? "Pool · after" : "Spa · after"}
-                    url={midweekAfterPhotoUrl(water, midweekNorm)}
-                  />
+                  <IncidentServicePhotoRow items={midweekGalleryItems(water, midweekNorm)} />
                 </div>
+                <p className={pageStyles.meta}>
+                  Technician:{" "}
+                  <strong>
+                    {midweekNorm.technicianSlug
+                      ? formatTechnicianSlugForDisplay(midweekNorm.technicianSlug)
+                      : "—"}
+                  </strong>
+                </p>
                 <ReadingsTable water={water} workState={midweekNorm.workState} />
                 <p className={pageStyles.muted} style={{ marginTop: "0.5rem" }}>
                   Chemicals added

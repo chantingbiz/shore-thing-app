@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import StephenRoutePropertyList from "../stephen/StephenRoutePropertyList.jsx";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import { getTechnicianBySlug } from "../../data/technicians.js";
+import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js";
 import styles from "./TechnicianRoutePropertiesPage.module.css";
 
 /**
@@ -28,7 +29,9 @@ export default function TechnicianRoutePropertiesPage({ routeType }) {
 
   return (
     <SubpageTemplate
-      title={`${technician.name} · ${label}`}
+      title={`${
+        technician.name ?? formatTechnicianSlugForDisplay(technician.slug)
+      } · ${label}`}
       backTo={`/technician/${techSlug}`}
       readableDarkText
     >

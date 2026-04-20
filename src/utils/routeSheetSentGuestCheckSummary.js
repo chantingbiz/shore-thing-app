@@ -5,8 +5,12 @@ import {
   ensureServiceLogsForToday,
   getPropertyById,
 } from "../lib/supabaseStore.js";
-import { getLocalDayKey } from "./localDay.js";
-import { isPropertyCompletedToday } from "./propertyCompletion.js";
+import { getTodayEasternDate } from "../lib/easternDate.js";
+import {
+  fetchRouteInstanceContext,
+  getRouteInstanceStatus,
+  mergeRealtimeTodayServiceLogsIntoIndex,
+} from "./routeInstanceStatus.js";
 
 /** Sent weekly rows only (dashboard sets `sent_at` on send). */
 export function isRouteSheetRowSent(row) {
@@ -26,8 +30,9 @@ export function isRouteSheetRowIncludedOnActiveSheet(row) {
 }
 
 /**
- * Guest/check totals from sent `route_sheet_items` for the week; completed counts use
- * `isPropertyCompletedToday` after resolving `property_id` → slug via the properties cache.
+ * Guest/check totals from sent `route_sheet_items` for the week; completed and in-progress
+ * counts use {@link getRouteInstanceStatus} scoped to this `route_type`’s Eastern service dates
+ * in the sheet week (Sat–Sun turnover vs Mon–Fri midweek), not only “today”.
  *
  * Count rules:
  * - **Turnover:** sent rows with `included` on active sheet; split by `guest_check`.
@@ -36,8 +41,8 @@ export function isRouteSheetRowIncludedOnActiveSheet(row) {
  *
  * @param {string} technicianSlug
  * @param {'turnover'|'midweek'} routeType
- * @param {{ weekStartDate?: string, dayKey?: string }} [opts]
- * @returns {Promise<{ guestTotal: number, guestCompleted: number, checkTotal: number, checkCompleted: number, weekStartDate: string, midweekGuestsOnly: boolean }>}
+ * @param {{ weekStartDate?: string }} [opts]
+ * @returns {Promise<{ guestTotal: number, guestCompleted: number, guestInProgress: number, checkTotal: number, checkCompleted: number, checkInProgress: number, weekStartDate: string, midweekGuestsOnly: boolean }>}
  */
 export async function fetchRouteSheetSentGuestCheckSummary(
   technicianSlug,
@@ -47,15 +52,16 @@ export async function fetchRouteSheetSentGuestCheckSummary(
   const slug = String(technicianSlug ?? "").toLowerCase().trim();
   const weekStartDate =
     String(opts.weekStartDate ?? "").trim() || getActiveRouteSheetSaturdayEastern();
-  const dayKey = opts.dayKey ?? getLocalDayKey();
   const midweekGuestsOnly = routeType === "midweek";
 
   if (!slug || (routeType !== "turnover" && routeType !== "midweek")) {
     return {
       guestTotal: 0,
       guestCompleted: 0,
+      guestInProgress: 0,
       checkTotal: 0,
       checkCompleted: 0,
+      checkInProgress: 0,
       weekStartDate,
       midweekGuestsOnly,
     };
@@ -75,10 +81,25 @@ export async function fetchRouteSheetSentGuestCheckSummary(
   await ensurePropertiesById(propertyIds);
   await ensureServiceLogsForToday(slug);
 
+  const { logsByPropertyAndDate, activityDatesByProperty } = await fetchRouteInstanceContext(
+    slug,
+    weekStartDate,
+    routeType,
+    propertyIds
+  );
+  mergeRealtimeTodayServiceLogsIntoIndex(
+    slug,
+    logsByPropertyAndDate,
+    propertyIds,
+    getTodayEasternDate()
+  );
+
   let guestTotal = 0;
   let guestCompleted = 0;
+  let guestInProgress = 0;
   let checkTotal = 0;
   let checkCompleted = 0;
+  let checkInProgress = 0;
 
   for (const row of workloadRows) {
     const isGuest = row.guest_check === "guest";
@@ -86,13 +107,20 @@ export async function fetchRouteSheetSentGuestCheckSummary(
     else checkTotal += 1;
 
     const pid = String(row.property_id ?? "").trim();
-    const prop = pid ? getPropertyById(pid) : null;
-    const pslug = String(prop?.property_slug ?? "").trim();
-    const done = pslug ? isPropertyCompletedToday(slug, pslug, dayKey) : false;
+    const st = getRouteInstanceStatus({
+      propertyId: pid,
+      weekStartDate,
+      routeType,
+      logsByPropertyAndDate,
+      activityDatesByProperty,
+    });
+    const wip = !st.isCompleted && (st.isLive || st.isInProgress);
     if (isGuest) {
-      if (done) guestCompleted += 1;
+      if (st.isCompleted) guestCompleted += 1;
+      else if (wip) guestInProgress += 1;
     } else {
-      if (done) checkCompleted += 1;
+      if (st.isCompleted) checkCompleted += 1;
+      else if (wip) checkInProgress += 1;
     }
   }
 
@@ -106,8 +134,8 @@ export async function fetchRouteSheetSentGuestCheckSummary(
       included_rows: active.length,
       workload_rows: workloadRows.length,
       midweek_guests_only: midweekGuestsOnly,
-      guest: `${guestCompleted}/${guestTotal}`,
-      check: `${checkCompleted}/${checkTotal}`,
+      guest: `${guestCompleted}/${guestTotal} done · ${guestInProgress} active`,
+      check: `${checkCompleted}/${checkTotal} done · ${checkInProgress} active`,
     });
   }
 
@@ -115,8 +143,10 @@ export async function fetchRouteSheetSentGuestCheckSummary(
     return {
       guestTotal,
       guestCompleted,
+      guestInProgress,
       checkTotal: 0,
       checkCompleted: 0,
+      checkInProgress: 0,
       weekStartDate,
       midweekGuestsOnly: true,
     };
@@ -125,9 +155,42 @@ export async function fetchRouteSheetSentGuestCheckSummary(
   return {
     guestTotal,
     guestCompleted,
+    guestInProgress,
     checkTotal,
     checkCompleted,
+    checkInProgress,
     weekStartDate,
     midweekGuestsOnly: false,
   };
+}
+
+/**
+ * True when every counted row on the sent sheet (included, route-type rules) is completed
+ * and none are live / in-progress — suitable for archive-readiness UI per technician + route_type + week.
+ *
+ * @param {Awaited<ReturnType<typeof fetchRouteSheetSentGuestCheckSummary>>} summary
+ */
+export function isSentSheetFullyArchiveReady(summary) {
+  if (!summary || typeof summary !== "object") return false;
+  const {
+    guestTotal,
+    guestCompleted,
+    guestInProgress,
+    checkTotal,
+    checkCompleted,
+    checkInProgress,
+    midweekGuestsOnly,
+  } = summary;
+  if (midweekGuestsOnly) {
+    if (guestTotal === 0) return false;
+    return guestCompleted === guestTotal && guestInProgress === 0;
+  }
+  const total = guestTotal + checkTotal;
+  if (total === 0) return false;
+  return (
+    guestCompleted === guestTotal &&
+    checkCompleted === checkTotal &&
+    guestInProgress === 0 &&
+    checkInProgress === 0
+  );
 }

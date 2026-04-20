@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import { getServiceHistoryRows } from "../../lib/api.js";
 import { addGregorianDaysToYmd, getTodayEasternDate } from "../../lib/easternDate.js";
 import { ensurePropertiesById, getPropertyById } from "../../lib/supabaseStore.js";
+import ServicePhotoGallery from "../../components/ServicePhotoGallery.jsx";
 import glass from "../../styles/glassButtons.module.css";
+import { servicePhotoItemsFromRow } from "../../utils/servicePhotoSlots.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
 import histStyles from "./AdminServiceHistoryPage.module.css";
@@ -131,12 +133,7 @@ export default function AdminServiceHistoryPage() {
           const prop = getPropertyById(row.property_id);
           const title = prop?.name || row.property_name || row.property_id;
           const sub = [prop?.property_slug, prop?.address].filter(Boolean).join(" · ");
-          const photos = [
-            row.pool_before_photo_url,
-            row.pool_after_photo_url,
-            row.spa_before_photo_url,
-            row.spa_after_photo_url,
-          ].filter(Boolean);
+          const photoItems = servicePhotoItemsFromRow(row);
           return (
             <li key={row.id} className={histStyles.card}>
               <div className={histStyles.cardTop}>
@@ -151,13 +148,9 @@ export default function AdminServiceHistoryPage() {
                   </div>
                 </div>
               </div>
-              {photos.length ? (
-                <div className={histStyles.thumbs}>
-                  {photos.map((url) => (
-                    <a key={url} href={url} target="_blank" rel="noreferrer" className={histStyles.thumbA}>
-                      <img src={url} alt="" className={histStyles.thumb} />
-                    </a>
-                  ))}
+              {photoItems.length ? (
+                <div className={histStyles.thumbs} aria-label="Service photo previews">
+                  <ServicePhotoGallery items={photoItems} variant="compact" />
                 </div>
               ) : null}
               <details className={histStyles.details}>

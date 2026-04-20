@@ -199,6 +199,14 @@
   margin-top: 0.15rem;
 }
 
+.cardBadges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
 .liveBadge {
   flex-shrink: 0;
   padding: 0.2rem 0.45rem;
@@ -214,6 +222,22 @@
     0 2px 6px rgba(0, 0, 0, 0.55),
     0 1px 2px rgba(0, 0, 0, 0.45);
   animation: listTimerGlow 1.6s ease-in-out infinite;
+}
+
+.inProgressBadge {
+  flex-shrink: 0;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(96, 140, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  text-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .timersRow {
@@ -276,6 +300,11 @@
   .timerPill {
     animation: none;
   }
+}
+
+.jobGlassBtnDisabled {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .cardName {
