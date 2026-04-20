@@ -3,11 +3,11 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { getTechnicianBySlug } from "../../data/technicians.js";
 import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js";
 import { TECHNICIAN_ROUTE_TYPES } from "../../data/technicianRouteSheetsMock.js";
-import { onSupabaseDataChanged } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
 import { fetchRouteSheetSentGuestCheckSummary } from "../../utils/routeSheetSentGuestCheckSummary.js";
 import { technicianRouteListPath } from "../../utils/technicianRoutePaths.js";
 import glass from "../../styles/glassButtons.module.css";
+import layoutStyles from "../../styles/layouts.module.css";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./TechnicianRouteTypeChooser.module.css";
 
@@ -111,8 +111,9 @@ export default function TechnicianRouteTypeChooser() {
   const technician = getTechnicianBySlug(slug);
   const techSlug = (technician?.slug ?? "").toLowerCase();
   useSupabaseSyncTick();
-
-  const [reloadNonce, setReloadNonce] = useState(0);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  /** Cycles 0→2 for ".", "..", "..." on the visit loading line */
+  const [loadingDotsPhase, setLoadingDotsPhase] = useState(0);
   const [byType, setByType] = useState(() => ({
     turnover: {
       guestTotal: 0,
@@ -131,10 +132,6 @@ export default function TechnicianRouteTypeChooser() {
       checkInProgress: 0,
     },
   }));
-
-  useEffect(() => {
-    return onSupabaseDataChanged(() => setReloadNonce((n) => n + 1));
-  }, []);
 
   const loadSummaries = useCallback(async () => {
     if (!techSlug) return;
@@ -163,22 +160,50 @@ export default function TechnicianRouteTypeChooser() {
       });
     } catch {
       /* keep prior counts */
+    } finally {
+      setInitialLoadDone(true);
     }
   }, [techSlug]);
 
   useEffect(() => {
     void loadSummaries();
-  }, [loadSummaries, reloadNonce]);
+  }, [loadSummaries]);
+
+  const showInitialLoadingBanner = Boolean(techSlug) && !initialLoadDone;
+  useEffect(() => {
+    if (!showInitialLoadingBanner) {
+      setLoadingDotsPhase(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setLoadingDotsPhase((p) => (p + 1) % 3);
+    }, 450);
+    return () => clearInterval(id);
+  }, [showInitialLoadingBanner]);
 
   if (!technician) {
     return <Navigate to="/technicians" replace />;
   }
+
+  const loadingVisitDataLabel = `Loading visit data${".".repeat(loadingDotsPhase + 1)}`;
 
   return (
     <SubpageTemplate
       title={technician.name ?? formatTechnicianSlugForDisplay(technician.slug)}
       backTo="/technicians"
       readableDarkText
+      belowBack={
+        showInitialLoadingBanner ? (
+          <p
+            className={layoutStyles.subpageLoadingBanner}
+            role="status"
+            aria-live="polite"
+            aria-label="Loading visit data"
+          >
+            {loadingVisitDataLabel}
+          </p>
+        ) : null
+      }
     >
       <p className={styles.intro}>Choose your route sheet</p>
       <div className={styles.cardStack} role="group" aria-label="Route type">

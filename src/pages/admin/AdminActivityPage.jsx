@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   TECHNICIANS,
@@ -9,25 +9,18 @@ import { formatTechnicianSlugForDisplay } from "../../utils/technicianDisplay.js
 import {
   formatActivityTime,
   getFirstActivityTimestampToday,
+  getPropertiesTouchedToday,
 } from "../../utils/activityLog.js";
-import {
-  getActiveRouteSheetSaturdayEastern,
-  getOperationalRouteSheetTypeForToday,
-} from "../../lib/routeSheetWeek.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import styles from "./adminShared.module.css";
 import { primeTechnicianToday } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
-import { fetchRouteSheetSentGuestCheckSummary } from "../../utils/routeSheetSentGuestCheckSummary.js";
+import { getAdminPropertyDayStatus } from "../../utils/technicianPropertyStatus.js";
 
 export default function AdminActivityPage() {
   useSupabaseSyncTick();
   const [poll, setPoll] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [sheetByTech, setSheetByTech] = useState(
-    /** @type {Record<string, { turnover: Awaited<ReturnType<typeof fetchRouteSheetSentGuestCheckSummary>>, midweek: Awaited<ReturnType<typeof fetchRouteSheetSentGuestCheckSummary>> } | undefined>} */
-    {}
-  );
 
   useEffect(() => {
     const id = window.setInterval(() => setPoll((n) => n + 1), 4000);
@@ -44,33 +37,9 @@ export default function AdminActivityPage() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const week = getActiveRouteSheetSaturdayEastern();
-    void (async () => {
-      const next = {};
-      await Promise.all(
-        TECHNICIANS.map(async (t) => {
-          const slug = t.slug;
-          const [turnover, midweek] = await Promise.all([
-            fetchRouteSheetSentGuestCheckSummary(slug, "turnover", { weekStartDate: week }),
-            fetchRouteSheetSentGuestCheckSummary(slug, "midweek", { weekStartDate: week }),
-          ]);
-          next[slug] = { turnover, midweek };
-        })
-      );
-      if (!cancelled) setSheetByTech(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshTick, poll]);
-
   const handleRefresh = useCallback(() => {
     setRefreshTick((n) => n + 1);
   }, []);
-
-  const operationalType = useMemo(() => getOperationalRouteSheetTypeForToday(), [poll, refreshTick]);
 
   return (
     <SubpageTemplate
@@ -92,15 +61,21 @@ export default function AdminActivityPage() {
         {TECHNICIANS.map((t) => {
           void refreshTick;
           const first = getFirstActivityTimestampToday(t.slug);
-          const pair = sheetByTech[t.slug];
-          const to = pair?.turnover;
-          const mw = pair?.midweek;
+          const touched = getPropertiesTouchedToday(t.slug);
+          const hasActivityToday = first != null || touched.length > 0;
+
+          let completedCount = 0;
+          let inProgressCount = 0;
+          if (hasActivityToday) {
+            for (const p of touched) {
+              const st = getAdminPropertyDayStatus(t.slug, p.propertySlug);
+              if (st === "completed") completedCount++;
+              else if (st === "in_progress") inProgressCount++;
+            }
+          }
+
           const techLabel =
             getTechnicianBySlug(t.slug)?.name ?? formatTechnicianSlugForDisplay(t.slug);
-          const showRouteStats =
-            operationalType === "turnover"
-              ? !!to && (to.guestTotal ?? 0) + (to.checkTotal ?? 0) > 0
-              : !!mw && (mw.guestTotal ?? 0) > 0;
           return (
             <Link
               key={t.slug}
@@ -119,35 +94,13 @@ export default function AdminActivityPage() {
                   ? `Started ${formatActivityTime(first)}`
                   : "No activity"}
               </p>
-              {showRouteStats && operationalType === "turnover" && to ? (
+              {hasActivityToday ? (
                 <div
                   className={styles.cardRouteStats}
-                  aria-label={`Turnover route sheet for ${techLabel} (today)`}
+                  aria-label={`Today's progress for ${techLabel}`}
                 >
-                  <p className={styles.routeStatPill}>
-                    {to.guestCompleted}/{to.guestTotal} guests completed
-                  </p>
-                  <p className={styles.routeStatPill}>
-                    {(to.guestInProgress ?? 0)}/{(to.guestTotal ?? 0)} guests in progress
-                  </p>
-                  <p className={styles.routeStatPill}>
-                    {to.checkCompleted}/{to.checkTotal} checks completed
-                  </p>
-                  <p className={styles.routeStatPill}>
-                    {(to.checkInProgress ?? 0)}/{(to.checkTotal ?? 0)} checks in progress
-                  </p>
-                </div>
-              ) : showRouteStats && operationalType === "midweek" && mw ? (
-                <div
-                  className={styles.cardRouteStats}
-                  aria-label={`Midweek route sheet for ${techLabel} (today)`}
-                >
-                  <p className={styles.routeStatPill}>
-                    {mw.guestCompleted}/{mw.guestTotal} guests completed
-                  </p>
-                  <p className={styles.routeStatPill}>
-                    {(mw.guestInProgress ?? 0)}/{(mw.guestTotal ?? 0)} guests in progress
-                  </p>
+                  <p className={styles.routeStatPill}>Completed: {completedCount}</p>
+                  <p className={styles.routeStatPill}>In progress: {inProgressCount}</p>
                 </div>
               ) : null}
             </Link>

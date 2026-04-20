@@ -1,5 +1,8 @@
 import { getRouteSheetItemsForWeek } from "../lib/api.js";
-import { getActiveRouteSheetSaturdayEastern } from "../lib/routeSheetWeek.js";
+import {
+  getActiveRouteSheetSaturdayEastern,
+  serviceDatesForRouteTypeInSheetWeek,
+} from "../lib/routeSheetWeek.js";
 import {
   ensurePropertiesById,
   ensureServiceLogsForToday,
@@ -10,6 +13,7 @@ import {
   fetchRouteInstanceContext,
   getRouteInstanceStatus,
   mergeRealtimeTodayServiceLogsIntoIndex,
+  serviceLogRowHasChemReadingsEntered,
 } from "./routeInstanceStatus.js";
 
 /** Sent weekly rows only (dashboard sets `sent_at` on send). */
@@ -124,7 +128,11 @@ export async function fetchRouteSheetSentGuestCheckSummary(
     }
   }
 
-  if (import.meta.env.DEV) {
+  const debugCounts =
+    import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    window?.localStorage?.getItem("debugRouteSheetSentCounts") === "1";
+  if (debugCounts) {
     console.log("[route sheet sent counts]", {
       week_start_date: weekStartDate,
       technician_slug: slug,
@@ -162,6 +170,68 @@ export async function fetchRouteSheetSentGuestCheckSummary(
     weekStartDate,
     midweekGuestsOnly: false,
   };
+}
+
+/**
+ * True when at least one property on the sent+included workload for this route type has saved
+ * readings or chemicals on a `service_logs` row for a `service_date` in that route type's sheet
+ * week window. Hose timers, activity_logs-only, and photos do not count.
+ *
+ * @param {string} technicianSlug
+ * @param {'turnover'|'midweek'} routeType
+ * @param {{ weekStartDate?: string }} [opts]
+ */
+export async function sentSheetHasChemReadingsEnteredForRouteWindow(
+  technicianSlug,
+  routeType,
+  opts = {}
+) {
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  const weekStartDate =
+    String(opts.weekStartDate ?? "").trim() || getActiveRouteSheetSaturdayEastern();
+  const midweekGuestsOnly = routeType === "midweek";
+
+  if (!slug || (routeType !== "turnover" && routeType !== "midweek")) {
+    return false;
+  }
+
+  const items = await getRouteSheetItemsForWeek(weekStartDate, routeType, slug);
+  const sent = (items ?? []).filter(isRouteSheetRowSent);
+  const active = sent.filter(isRouteSheetRowIncludedOnActiveSheet);
+  const workloadRows = midweekGuestsOnly
+    ? active.filter((r) => r.guest_check === "guest")
+    : active;
+
+  const propertyIds = [
+    ...new Set(workloadRows.map((r) => String(r.property_id ?? "").trim()).filter(Boolean)),
+  ];
+  if (!propertyIds.length) return false;
+
+  await ensurePropertiesById(propertyIds);
+  await ensureServiceLogsForToday(slug);
+
+  const { logsByPropertyAndDate } = await fetchRouteInstanceContext(
+    slug,
+    weekStartDate,
+    routeType,
+    propertyIds
+  );
+  mergeRealtimeTodayServiceLogsIntoIndex(
+    slug,
+    logsByPropertyAndDate,
+    propertyIds,
+    getTodayEasternDate()
+  );
+
+  const dates = serviceDatesForRouteTypeInSheetWeek(weekStartDate, routeType);
+  for (const pid of propertyIds) {
+    const byDate = logsByPropertyAndDate.get(pid) ?? new Map();
+    for (const d of dates) {
+      const row = /** @type {Record<string, unknown> | null} */ (byDate.get(d) ?? null);
+      if (serviceLogRowHasChemReadingsEntered(row)) return true;
+    }
+  }
+  return false;
 }
 
 /**

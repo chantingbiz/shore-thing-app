@@ -112,6 +112,23 @@ export function serviceLogRowHasMeaningfulNonHoseWork(row) {
 }
 
 /**
+ * True when the row has any saved pool/spa readings or chemicals-added fields (the ReadingsForm
+ * payload). Does not include hose timestamps, activity_logs, or service photos.
+ *
+ * @param {Record<string, unknown> | null | undefined} row
+ */
+export function serviceLogRowHasChemReadingsEntered(row) {
+  if (!row) return false;
+  const ws = workStateFromServiceLogRow(row);
+  if (!ws) return false;
+  const patch = mapWorkStateToServiceLogPatch(ws);
+  for (const v of Object.values(patch)) {
+    if (String(v ?? "").trim() !== "") return true;
+  }
+  return false;
+}
+
+/**
  * @param {Record<string, unknown> | null | undefined} row
  */
 export function serviceLogRowHasActiveHose(row) {

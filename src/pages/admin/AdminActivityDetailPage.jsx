@@ -19,7 +19,10 @@ import styles from "./adminShared.module.css";
 import detailStyles from "./AdminActivityDetailPage.module.css";
 import { primeTechnicianToday } from "../../lib/supabaseStore.js";
 import { useSupabaseSyncTick } from "../../lib/useSupabaseSyncTick.js";
-import { fetchRouteSheetSentGuestCheckSummary } from "../../utils/routeSheetSentGuestCheckSummary.js";
+import {
+  fetchRouteSheetSentGuestCheckSummary,
+  sentSheetHasChemReadingsEnteredForRouteWindow,
+} from "../../utils/routeSheetSentGuestCheckSummary.js";
 
 export default function AdminActivityDetailPage() {
   const { techSlug } = useParams();
@@ -34,6 +37,10 @@ export default function AdminActivityDetailPage() {
     midweek: /** @type {Awaited<ReturnType<typeof fetchRouteSheetSentGuestCheckSummary>> | null} */ (
       null
     ),
+  });
+  const [chemSheetActive, setChemSheetActive] = useState({
+    turnover: false,
+    midweek: false,
   });
 
   useEffect(() => {
@@ -51,11 +58,20 @@ export default function AdminActivityDetailPage() {
     let cancelled = false;
     const week = getActiveRouteSheetSaturdayEastern();
     void (async () => {
-      const [turnover, midweek] = await Promise.all([
+      const [turnover, midweek, turnoverChem, midweekChem] = await Promise.all([
         fetchRouteSheetSentGuestCheckSummary("stephen", "turnover", { weekStartDate: week }),
         fetchRouteSheetSentGuestCheckSummary("stephen", "midweek", { weekStartDate: week }),
+        sentSheetHasChemReadingsEnteredForRouteWindow("stephen", "turnover", {
+          weekStartDate: week,
+        }),
+        sentSheetHasChemReadingsEnteredForRouteWindow("stephen", "midweek", {
+          weekStartDate: week,
+        }),
       ]);
-      if (!cancelled) setSheetPair({ turnover, midweek });
+      if (!cancelled) {
+        setSheetPair({ turnover, midweek });
+        setChemSheetActive({ turnover: turnoverChem, midweek: midweekChem });
+      }
     })();
     return () => {
       cancelled = true;
@@ -97,10 +113,36 @@ export default function AdminActivityDetailPage() {
   const groupedEvents = getGroupedDisplayEvents(rawEvents);
   const to = sheetPair.turnover;
   const mw = sheetPair.midweek;
+
+  const turnoverTotal = (to?.guestTotal ?? 0) + (to?.checkTotal ?? 0);
+  const turnoverDone =
+    turnoverTotal > 0 &&
+    (to?.guestCompleted ?? 0) >= (to?.guestTotal ?? 0) &&
+    (to?.checkCompleted ?? 0) >= (to?.checkTotal ?? 0) &&
+    (to?.guestInProgress ?? 0) === 0 &&
+    (to?.checkInProgress ?? 0) === 0;
+
+  const midweekTotal = mw?.guestTotal ?? 0;
+  const midweekDone =
+    midweekTotal > 0 &&
+    (mw?.guestCompleted ?? 0) >= (mw?.guestTotal ?? 0) &&
+    (mw?.guestInProgress ?? 0) === 0;
+
+  /** Choose the relevant sheet context for the technician right now.
+   * - Prefer the operational type unless it's already fully completed and the other sheet still has work.
+   * - Never mix stats from both. Midweek = guests only. */
+  const effectiveSheetType =
+    operationalType === "turnover" && turnoverDone && !midweekDone && midweekTotal > 0
+      ? "midweek"
+      : operationalType;
+
+  const turnoverChemActive = chemSheetActive.turnover;
+  const midweekChemActive = chemSheetActive.midweek;
+
   const showRouteStats =
-    operationalType === "turnover"
-      ? !!to && (to.guestTotal ?? 0) + (to.checkTotal ?? 0) > 0
-      : !!mw && (mw.guestTotal ?? 0) > 0;
+    effectiveSheetType === "turnover"
+      ? !!to && turnoverTotal > 0 && turnoverChemActive
+      : !!mw && midweekTotal > 0 && midweekChemActive;
 
   return (
     <SubpageTemplate
@@ -115,7 +157,7 @@ export default function AdminActivityDetailPage() {
               First activity today: <strong>{formatActivityTime(firstAt)}</strong>
             </>
           ) : (
-            <>No activity logged today.</>
+            <>No activity today.</>
           )}
         </p>
         <button type="button" className={styles.refreshBtn} onClick={handleRefresh}>
@@ -123,7 +165,7 @@ export default function AdminActivityDetailPage() {
         </button>
       </div>
 
-      {showRouteStats && operationalType === "turnover" && to ? (
+      {showRouteStats && effectiveSheetType === "turnover" && to ? (
         <div
           className={styles.routeDayStats}
           aria-label="Turnover route sheet (today)"
@@ -141,7 +183,7 @@ export default function AdminActivityDetailPage() {
             {(to.checkInProgress ?? 0)}/{(to.checkTotal ?? 0)} checks in progress
           </p>
         </div>
-      ) : showRouteStats && operationalType === "midweek" && mw ? (
+      ) : showRouteStats && effectiveSheetType === "midweek" && mw ? (
         <div
           className={styles.routeDayStats}
           aria-label="Midweek route sheet (today)"
@@ -155,9 +197,7 @@ export default function AdminActivityDetailPage() {
         </div>
       ) : null}
 
-      {properties.length === 0 ? (
-        <p className={styles.placeholderNote}>No properties visited yet today.</p>
-      ) : (
+      {properties.length === 0 ? null : (
         <>
           <h2 className={detailStyles.sectionHeading}>Properties today</h2>
           <nav className={styles.list} aria-label="Properties with activity">

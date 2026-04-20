@@ -77,7 +77,14 @@ export default function StephenPropertyDetailPage() {
   useSupabaseSyncTick();
 
   useEffect(() => {
-    return onSupabaseDataChanged(() => setServiceLogRefreshNonce((n) => n + 1));
+    let last = 0;
+    return onSupabaseDataChanged(() => {
+      const nowMs = Date.now();
+      /** Avoid rapid nonce storms causing repeated route-context fetches while idle. */
+      if (nowMs - last < 1500) return;
+      last = nowMs;
+      setServiceLogRefreshNonce((n) => n + 1);
+    });
   }, []);
 
   const readingsPoolSigRef = useRef(null);

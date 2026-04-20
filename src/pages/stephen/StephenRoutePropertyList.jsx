@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRouteSheetItemsForWeek } from "../../lib/api.js";
 import { getTodayEasternDate } from "../../lib/easternDate.js";
@@ -40,6 +40,7 @@ import RouteParamBadges from "../../components/RouteParamBadges.jsx";
 import glass from "../../styles/glassButtons.module.css";
 import { flushPendingWorkNow } from "../../utils/workFlushRegistry.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
+import layoutStyles from "../../styles/layouts.module.css";
 import styles from "./StephenPropertiesPage.module.css";
 
 const TECH_SLUG = "stephen";
@@ -65,9 +66,13 @@ export default function StephenRoutePropertyList({ routeType }) {
   useSupabaseSyncTick();
   const [now, setNow] = useState(() => Date.now());
   const [refreshTick, setRefreshTick] = useState(0);
+  const lastRealtimeRefreshAtRef = useRef(0);
   const [routeList, setRouteList] = useState(/** @type {RouteListEntry[]} */ ([]));
   const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
   const [routeSheetLoading, setRouteSheetLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  /** Cycles 0→2 for ".", "..", "..." on the visit loading line */
+  const [loadingDotsPhase, setLoadingDotsPhase] = useState(0);
   /** Route-scoped status per property slug (completion / live hose / in-progress work). */
   const [instanceBySlug, setInstanceBySlug] = useState(
     /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean }>} */ ({})
@@ -82,17 +87,7 @@ export default function StephenRoutePropertyList({ routeType }) {
       const rawCount = items?.length ?? 0;
       const sent = (items ?? []).filter(isRouteSheetRowSent);
       const listRows = sent.filter(isRouteSheetRowIncludedOnActiveSheet);
-
-      if (import.meta.env.DEV) {
-        console.log("[technician route list]", {
-          week_start_date: week,
-          route_type: routeType,
-          technician_slug: TECH_SLUG,
-          rows_from_supabase: rawCount,
-          after_sent_and_included: listRows.length,
-          legacy_sort_or_seed: false,
-        });
-      }
+      void rawCount;
 
       const propertyIds = [
         ...new Set(listRows.map((r) => String(r.property_id ?? "").trim()).filter(Boolean)),
@@ -127,18 +122,28 @@ export default function StephenRoutePropertyList({ routeType }) {
       });
 
       setRouteList(out);
-
-      if (import.meta.env.DEV) {
-        console.log("[technician route list] rendered", { final_row_count: out.length });
-      }
     } catch (e) {
       console.error("[technician route list] load failed", e);
       setLoadError(e?.message ? String(e.message) : String(e));
       setRouteList([]);
     } finally {
       setRouteSheetLoading(false);
+      setInitialLoadDone(true);
     }
   }, [routeType]);
+
+  const showInitialLoadingBanner = !initialLoadDone;
+
+  useEffect(() => {
+    if (!showInitialLoadingBanner) {
+      setLoadingDotsPhase(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setLoadingDotsPhase((p) => (p + 1) % 3);
+    }, 450);
+    return () => clearInterval(id);
+  }, [showInitialLoadingBanner]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
@@ -150,7 +155,13 @@ export default function StephenRoutePropertyList({ routeType }) {
   }, [loadRouteSheet, refreshTick]);
 
   useEffect(() => {
-    return onSupabaseDataChanged(() => setRefreshTick((n) => n + 1));
+    return onSupabaseDataChanged(() => {
+      const nowMs = Date.now();
+      /** Avoid hammering route sheet + instance fetches on noisy realtime updates while idle. */
+      if (nowMs - lastRealtimeRefreshAtRef.current < 5000) return;
+      lastRealtimeRefreshAtRef.current = nowMs;
+      setRefreshTick((n) => n + 1);
+    });
   }, []);
 
   useEffect(() => {
@@ -261,12 +272,25 @@ export default function StephenRoutePropertyList({ routeType }) {
   const weekAnchor = getActiveRouteSheetSaturdayEastern();
   const routeServiceDates = serviceDatesForRouteTypeInSheetWeek(weekAnchor, routeType);
   const todayInRouteWindow = routeServiceDates.includes(getTodayEasternDate());
+  const loadingVisitDataLabel = `Loading visit data${".".repeat(loadingDotsPhase + 1)}`;
 
   return (
     <SubpageTemplate
       title={`Stephen · ${titleSuffix}`}
       backTo={`/technician/${TECH_SLUG}`}
       readableDarkText
+      belowBack={
+        showInitialLoadingBanner ? (
+          <p
+            className={layoutStyles.subpageLoadingBanner}
+            role="status"
+            aria-live="polite"
+            aria-label="Loading visit data"
+          >
+            {loadingVisitDataLabel}
+          </p>
+        ) : null
+      }
     >
       <div className={styles.toolbar}>
         <p className={styles.intro}>Select a property</p>
