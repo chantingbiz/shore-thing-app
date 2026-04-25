@@ -53,6 +53,7 @@ const TECH_SLUG = "stephen";
  *   id: string,
  *   sheetOrder: number,
  *   isGuest: boolean,
+ *   spaFillMinutes: number | null,
  *   routeSheet: { guest_check?: string | null, pool_heat?: string | null },
  * }} RouteListEntry
  */
@@ -114,6 +115,10 @@ export default function StephenRoutePropertyList({ routeType }) {
           id: pid,
           sheetOrder,
           isGuest,
+          spaFillMinutes:
+            p && Number.isFinite(Number(p.spa_fill_minutes))
+              ? Math.max(0, Math.floor(Number(p.spa_fill_minutes)))
+              : null,
           routeSheet: {
             guest_check: item.guest_check ?? guestCheck,
             pool_heat: item.pool_heat ?? null,
@@ -317,6 +322,17 @@ export default function StephenRoutePropertyList({ routeType }) {
             const poolSec = poolTs != null ? elapsedSecondsSince(poolTs, now) : null;
             const spaSec = spaTs != null ? elapsedSecondsSince(spaTs, now) : null;
             const hasActive = poolSec != null || spaSec != null;
+            const spaElapsedMin = spaSec != null ? Math.floor(spaSec / 60) : null;
+            const spaTargetMin =
+              spaSec != null && p.spaFillMinutes != null && p.spaFillMinutes > 0
+                ? p.spaFillMinutes
+                : null;
+            const spaWarnSoon =
+              spaElapsedMin != null && spaTargetMin != null
+                ? spaElapsedMin >= Math.max(0, spaTargetMin - 10) && spaElapsedMin < spaTargetMin
+                : false;
+            const spaWarnOver =
+              spaElapsedMin != null && spaTargetMin != null ? spaElapsedMin >= spaTargetMin : false;
             const st = instanceBySlug[p.slug] ?? {
               isCompleted: false,
               isLive: false,
@@ -328,7 +344,9 @@ export default function StephenRoutePropertyList({ routeType }) {
             return (
               <div
                 key={p.slug}
-                className={`${styles.cardShell} ${completed ? styles.cardShellCompleted : ""}`}
+                className={`${styles.cardShell} ${completed ? styles.cardShellCompleted : ""} ${
+                  spaWarnOver ? styles.cardShellSpaWarnOver : spaWarnSoon ? styles.cardShellSpaWarnSoon : ""
+                }`}
               >
                 <Link
                   to={technicianPropertyDetailPath(TECH_SLUG, routeType, p.slug)}

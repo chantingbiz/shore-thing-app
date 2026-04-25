@@ -13,8 +13,10 @@ import {
 } from "../utils/hoseTimers.js";
 import { logTechnicianActivity } from "../utils/activityLog.js";
 import {
-  parseSpaFillDisplayToMinutes,
+  parseSpaFillDigitsToMinutes,
+  spaFillDigitsToDisplay,
   spaFillMinutesToDisplay,
+  spaFillMinutesToDigits,
 } from "../utils/spaFillMinutesFormat.js";
 import { patchHoseFlagsOnSnapshot } from "../utils/technicianWorkSnapshot.js";
 import styles from "./PropertyHoseControls.module.css";
@@ -37,6 +39,7 @@ export default function PropertyHoseControls({
   const [spaActive, setSpaActive] = useState(false);
 
   const [spaFillDraft, setSpaFillDraft] = useState("0:00");
+  const [spaFillDigits, setSpaFillDigits] = useState("");
   const [spaFillError, setSpaFillError] = useState("");
   const [spaFillSaving, setSpaFillSaving] = useState(false);
 
@@ -50,6 +53,8 @@ export default function PropertyHoseControls({
   }, [propertySlug, technicianSlug]);
 
   useEffect(() => {
+    const nextDigits = spaFillMinutesToDigits(spaFillMinutes);
+    setSpaFillDigits(nextDigits);
     setSpaFillDraft(spaFillMinutesToDisplay(spaFillMinutes));
     setSpaFillError("");
   }, [propertyId, spaFillMinutes]);
@@ -121,9 +126,9 @@ export default function PropertyHoseControls({
   const handleSaveSpaFill = async () => {
     const pid = String(propertyId ?? "").trim();
     if (!pid) return;
-    const minutes = parseSpaFillDisplayToMinutes(spaFillDraft);
+    const minutes = parseSpaFillDigitsToMinutes(spaFillDigits);
     if (minutes === null) {
-      setSpaFillError("Use format H:MM with minutes 00–59.");
+      setSpaFillError("Enter digits only. Examples: 45 → 0:45, 125 → 1:25.");
       return;
     }
     setSpaFillError("");
@@ -133,7 +138,9 @@ export default function PropertyHoseControls({
       if (row && typeof onPropertySpaFillUpdated === "function") {
         onPropertySpaFillUpdated(row);
       }
-      setSpaFillDraft(spaFillMinutesToDisplay(row?.spa_fill_minutes ?? minutes));
+      const saved = row?.spa_fill_minutes ?? minutes;
+      setSpaFillDigits(spaFillMinutesToDigits(saved));
+      setSpaFillDraft(spaFillMinutesToDisplay(saved));
     } catch (e) {
       setSpaFillError(e?.message ? String(e.message) : "Could not save.");
     } finally {
@@ -192,10 +199,13 @@ export default function PropertyHoseControls({
                 type="text"
                 inputMode="numeric"
                 autoComplete="off"
-                placeholder="H:MM"
+                placeholder="digits (e.g. 125)"
                 value={spaFillDraft}
                 onChange={(e) => {
-                  setSpaFillDraft(e.target.value);
+                  const digits = String(e.target.value ?? "").replace(/\D/g, "").slice(0, 3);
+                  setSpaFillDigits(digits);
+                  const nextDisplay = spaFillDigitsToDisplay(digits);
+                  setSpaFillDraft(nextDisplay || "0:00");
                   setSpaFillError("");
                 }}
                 aria-invalid={Boolean(spaFillError)}
@@ -215,7 +225,7 @@ export default function PropertyHoseControls({
               </button>
             </div>
             <p id={`spa-fill-hint-${propertySlug}`} className={styles.spaFillHint}>
-              Format: H:MM
+              Type digits only (auto-formats to H:MM).
             </p>
             {spaFillError ? (
               <p id={`spa-fill-err-${propertySlug}`} className={styles.spaFillErr} role="alert">
