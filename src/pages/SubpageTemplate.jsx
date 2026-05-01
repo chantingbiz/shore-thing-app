@@ -9,6 +9,8 @@ export default function SubpageTemplate({
   readableDarkText = false,
   /** Wider max-width for desktop admin tools (e.g. route sheet dashboard). */
   wideLayout = false,
+  /** Optional row aligned right next to Back (e.g. actions). When set, Back and this sit on one horizontal bar. */
+  headerTrailing = null,
   /** Optional content directly under the Back link and above the title block (e.g. loading status). */
   belowBack = null,
 }) {
@@ -27,12 +29,24 @@ export default function SubpageTemplate({
     <div className={shellClass}>
       <div className={layout.ambient} aria-hidden />
       <header className={layout.subpageHeader}>
-        <Link to={backTo} className={layout.back}>
-          <span className={layout.backIcon} aria-hidden>
-            ←
-          </span>
-          Back
-        </Link>
+        {headerTrailing != null ? (
+          <div className={layout.subpageHeaderBar}>
+            <Link to={backTo} className={layout.back}>
+              <span className={layout.backIcon} aria-hidden>
+                ←
+              </span>
+              Back
+            </Link>
+            <div className={layout.subpageHeaderTrailing}>{headerTrailing}</div>
+          </div>
+        ) : (
+          <Link to={backTo} className={layout.back}>
+            <span className={layout.backIcon} aria-hidden>
+              ←
+            </span>
+            Back
+          </Link>
+        )}
         {belowBack ? <div className={layout.belowBackSlot}>{belowBack}</div> : null}
         <div className={layout.titleBlock}>
           <h1 className={titleClass}>{title}</h1>

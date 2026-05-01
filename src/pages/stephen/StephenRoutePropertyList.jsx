@@ -55,6 +55,7 @@ const TECH_SLUG = "stephen";
  *   isGuest: boolean,
  *   spaFillMinutes: number | null,
  *   routeSheet: { guest_check?: string | null, pool_heat?: string | null },
+ *   adminNote: string,
  * }} RouteListEntry
  */
 
@@ -78,6 +79,8 @@ export default function StephenRoutePropertyList({ routeType }) {
   const [instanceBySlug, setInstanceBySlug] = useState(
     /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean }>} */ ({})
   );
+  /** Show route sheet `comments` on list tiles (detail page unchanged). */
+  const [showAdminNotes, setShowAdminNotes] = useState(false);
 
   const loadRouteSheet = useCallback(async () => {
     const week = getActiveRouteSheetSaturdayEastern();
@@ -108,6 +111,7 @@ export default function StephenRoutePropertyList({ routeType }) {
         seen.add(slug);
         const isGuest = item.guest_check === "guest";
         const guestCheck = isGuest ? "guest" : "check";
+        const adminNote = String(item.comments ?? "").trim();
         out.push({
           slug,
           name: String(p?.name ?? item.property_name ?? slug),
@@ -123,6 +127,7 @@ export default function StephenRoutePropertyList({ routeType }) {
             guest_check: item.guest_check ?? guestCheck,
             pool_heat: item.pool_heat ?? null,
           },
+          adminNote,
         });
       });
 
@@ -282,8 +287,47 @@ export default function StephenRoutePropertyList({ routeType }) {
   return (
     <SubpageTemplate
       title={`Stephen · ${titleSuffix}`}
+      subtitle="Select a property"
       backTo={`/technician/${TECH_SLUG}`}
       readableDarkText
+      headerTrailing={
+        <div className={styles.sheetHeaderTrailing}>
+          <div className={styles.sheetNotesCluster}>
+            <span className={styles.sheetNotesLabel} aria-hidden>
+              Notes
+            </span>
+            <div
+              className={styles.adminNotesSeg}
+              role="group"
+              aria-label="Admin notes on property tiles"
+            >
+              <button
+                type="button"
+                className={`${styles.adminNotesSegBtn} ${
+                  !showAdminNotes ? styles.adminNotesSegOffOn : styles.adminNotesSegBtnOff
+                }`}
+                aria-pressed={!showAdminNotes}
+                onClick={() => setShowAdminNotes(false)}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                className={`${styles.adminNotesSegBtn} ${
+                  showAdminNotes ? styles.adminNotesSegOnOn : styles.adminNotesSegBtnOff
+                }`}
+                aria-pressed={showAdminNotes}
+                onClick={() => setShowAdminNotes(true)}
+              >
+                On
+              </button>
+            </div>
+          </div>
+          <button type="button" className={styles.refreshBtn} onClick={handleRefresh}>
+            Refresh
+          </button>
+        </div>
+      }
       belowBack={
         showInitialLoadingBanner ? (
           <p
@@ -297,12 +341,6 @@ export default function StephenRoutePropertyList({ routeType }) {
         ) : null
       }
     >
-      <div className={styles.toolbar}>
-        <p className={styles.intro}>Select a property</p>
-        <button type="button" className={styles.refreshBtn} onClick={handleRefresh}>
-          Refresh
-        </button>
-      </div>
       {loadError ? (
         <p className={styles.intro} role="alert">
           Could not load route sheet: {loadError}
@@ -414,6 +452,14 @@ export default function StephenRoutePropertyList({ routeType }) {
                       {completed ? "Completed" : "Not completed"}
                     </span>
                   </p>
+                  {showAdminNotes && p.adminNote ? (
+                    <div className={styles.tileAdminNote}>
+                      <div className={styles.tileAdminNoteInner}>
+                        <span className={styles.tileAdminNoteLabel}>Admin note:</span>
+                        <span className={styles.tileAdminNoteText}>{p.adminNote}</span>
+                      </div>
+                    </div>
+                  ) : null}
                   {hasActive ? (
                     <div className={styles.timersRow} aria-label="Active hose timers">
                       {poolSec != null ? (

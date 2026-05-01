@@ -5,6 +5,7 @@ import {
   registerWorkFlush,
   unregisterWorkFlush,
 } from "../utils/workFlushRegistry.js";
+import { poolClarifierUnitSuffix } from "../utils/poolClarifierDisplay.js";
 
 const pair = () => ({ before: "", after: "" });
 
@@ -19,8 +20,8 @@ const emptyPoolChem = () => ({
   clarifier: "",
 });
 
-/** Default amount when pool clarifier is added (stored in `service_logs.pool_clarifier`). */
-const POOL_CLARIFIER_DEFAULT = ".25";
+/** Default amount when pool clarifier is added — ounces in `service_logs.pool_clarifier`. */
+const POOL_CLARIFIER_DEFAULT = "5";
 
 /** TB / FC / pH / TA only — Temp is never autofilled. */
 const NORMAL_READING_KEYS = ["tb", "fc", "ph", "ta"];
@@ -113,7 +114,7 @@ function ChemicalsAddedFields({ idPrefix, values, onFieldChange, rows }) {
 function PoolClarifierControl({ idPrefix, clarifier, onAdd, onRemove }) {
   const trimmed = String(clarifier ?? "").trim();
   const active = trimmed.length > 0;
-  const displayAmount = active ? trimmed : "";
+  const suffix = active ? poolClarifierUnitSuffix(trimmed) : "oz";
 
   if (!active) {
     return (
@@ -140,10 +141,10 @@ function PoolClarifierControl({ idPrefix, clarifier, onAdd, onRemove }) {
           className={styles.clarifierValueBox}
           aria-labelledby={`${idPrefix}-clarifier-label`}
         >
-          {displayAmount}
+          {trimmed}
         </span>
         <span className={styles.chemSuffix} aria-hidden>
-          bottle
+          {suffix}
         </span>
         <button
           type="button"

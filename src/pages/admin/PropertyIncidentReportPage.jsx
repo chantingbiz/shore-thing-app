@@ -15,6 +15,7 @@ import ServicePhotoGallery from "../../components/ServicePhotoGallery.jsx";
 import glass from "../../styles/glassButtons.module.css";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import pageStyles from "./PropertyIncidentReportPage.module.css";
+import { formatPoolClarifierWithUnit } from "../../utils/poolClarifierDisplay.js";
 
 /** Boss demo defaults — all editable in the UI. */
 const DEFAULT_PROPERTY_SEARCH = "Whale Kept Secret";
@@ -95,7 +96,7 @@ function ChemList({ water, workState }) {
           ["Granulated", chem.granulated],
           ["TA added", chem.ta],
           ...(String(chem?.clarifier ?? "").trim()
-            ? [["Clarifier", `${String(chem.clarifier).trim()} bottle`]]
+            ? [["Clarifier", formatPoolClarifierWithUnit(chem.clarifier)]]
             : []),
         ]
       : [

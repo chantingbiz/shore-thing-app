@@ -32,7 +32,7 @@ function patchIncludesChemicalColumns(patch) {
 
 /**
  * Chemicals Added → `service_logs` columns (distinct from pool/spa TA readings).
- * Pool: Pucks → pool_pucks, Granulated → pool_granulated, TA → pool_ta_added, Clarifier → pool_clarifier.
+ * Pool: Pucks → pool_pucks, Granulated → pool_granulated, TA → pool_ta_added, Clarifier → pool_clarifier (ounces; legacy fractional “bottle” values may exist).
  * Spa: Mini Pucks → spa_mini_pucks, Granulated → spa_granulated, TA → spa_ta_added.
  * @param {{ poolChem?: any, spaChem?: any }} state
  */

@@ -13,10 +13,11 @@ import {
 } from "../utils/hoseTimers.js";
 import { logTechnicianActivity } from "../utils/activityLog.js";
 import {
-  parseSpaFillDigitsToMinutes,
-  spaFillDigitsToDisplay,
-  spaFillMinutesToDisplay,
-  spaFillMinutesToDigits,
+  SPA_FILL_HOUR_OPTIONS,
+  SPA_FILL_MINUTE_STEP_OPTIONS,
+  dropdownValuesToTotalMinutes,
+  formatSpaFillTargetPreview,
+  totalMinutesToDropdownValues,
 } from "../utils/spaFillMinutesFormat.js";
 import { patchHoseFlagsOnSnapshot } from "../utils/technicianWorkSnapshot.js";
 import styles from "./PropertyHoseControls.module.css";
@@ -38,8 +39,8 @@ export default function PropertyHoseControls({
   const [poolActive, setPoolActive] = useState(false);
   const [spaActive, setSpaActive] = useState(false);
 
-  const [spaFillDigits, setSpaFillDigits] = useState("");
-  const [spaFillFocused, setSpaFillFocused] = useState(false);
+  const [spaFillHours, setSpaFillHours] = useState(0);
+  const [spaFillMinuteStep, setSpaFillMinuteStep] = useState(0);
   const [spaFillError, setSpaFillError] = useState("");
   const [spaFillSaving, setSpaFillSaving] = useState(false);
 
@@ -53,8 +54,9 @@ export default function PropertyHoseControls({
   }, [propertySlug, technicianSlug]);
 
   useEffect(() => {
-    const nextDigits = spaFillMinutesToDigits(spaFillMinutes);
-    setSpaFillDigits(nextDigits);
+    const { hours, minutes } = totalMinutesToDropdownValues(spaFillMinutes);
+    setSpaFillHours(hours);
+    setSpaFillMinuteStep(minutes);
     setSpaFillError("");
   }, [propertyId, spaFillMinutes]);
 
@@ -125,11 +127,7 @@ export default function PropertyHoseControls({
   const handleSaveSpaFill = async () => {
     const pid = String(propertyId ?? "").trim();
     if (!pid) return;
-    const minutes = spaFillDigits ? parseSpaFillDigitsToMinutes(spaFillDigits) : 0;
-    if (spaFillDigits && minutes === null) {
-      setSpaFillError("Enter digits only. Examples: 45 → 0:45, 125 → 1:25.");
-      return;
-    }
+    const minutes = dropdownValuesToTotalMinutes(spaFillHours, spaFillMinuteStep);
     setSpaFillError("");
     setSpaFillSaving(true);
     try {
@@ -138,7 +136,9 @@ export default function PropertyHoseControls({
         onPropertySpaFillUpdated(row);
       }
       const saved = row?.spa_fill_minutes ?? minutes;
-      setSpaFillDigits(spaFillMinutesToDigits(saved));
+      const next = totalMinutesToDropdownValues(saved);
+      setSpaFillHours(next.hours);
+      setSpaFillMinuteStep(next.minutes);
     } catch (e) {
       setSpaFillError(e?.message ? String(e.message) : "Could not save.");
     } finally {
@@ -146,8 +146,9 @@ export default function PropertyHoseControls({
     }
   };
 
-  const spaFillDisplay = spaFillDigitsToDisplay(spaFillDigits);
-  const spaFillValue = spaFillFocused ? spaFillDisplay : spaFillDisplay || "0:00";
+  const spaFillTotalUi = dropdownValuesToTotalMinutes(spaFillHours, spaFillMinuteStep);
+  const spaFillTargetLine = formatSpaFillTargetPreview(spaFillTotalUi);
+  const spaFillGroupId = `spa-fill-group-${propertySlug}`;
 
   return (
     <section className={styles.wrap} aria-label="Hose controls">
@@ -189,58 +190,89 @@ export default function PropertyHoseControls({
           </p>
         ) : null}
         {String(propertyId ?? "").trim() ? (
-          <div className={styles.spaFillRef}>
-            <label className={styles.spaFillLabel} htmlFor={`spa-fill-${propertySlug}`}>
+          <div
+            className={styles.spaFillRef}
+            role="group"
+            aria-labelledby={spaFillGroupId}
+          >
+            <div id={spaFillGroupId} className={styles.spaFillLabel}>
               Typical Spa Fill Time
-            </label>
-            <div className={styles.spaFillRow}>
-              <input
-                id={`spa-fill-${propertySlug}`}
-                className={styles.spaFillInput}
-                type="tel"
-                inputMode="numeric"
-                pattern="\d*"
-                autoComplete="off"
-                placeholder="0:00"
-                value={spaFillValue}
-                onChange={(e) => {
-                  const digits = String(e.target.value ?? "")
-                    .replace(/\D/g, "")
-                    .slice(0, 3);
-                  setSpaFillDigits(digits);
-                  setSpaFillError("");
-                }}
-                onFocus={(e) => {
-                  setSpaFillFocused(true);
-                  // On mobile, focusing doesn't always select; defer to next tick.
-                  window.setTimeout(() => {
-                    try {
-                      e.target.select?.();
-                    } catch {
-                      // ignore
-                    }
-                  }, 0);
-                }}
-                onBlur={() => setSpaFillFocused(false)}
-                aria-invalid={Boolean(spaFillError)}
-                aria-describedby={
-                  spaFillError
-                    ? `spa-fill-hint-${propertySlug} spa-fill-err-${propertySlug}`
-                    : `spa-fill-hint-${propertySlug}`
-                }
-              />
-              <button
-                type="button"
-                className={styles.spaFillSave}
-                disabled={spaFillSaving}
-                onClick={() => void handleSaveSpaFill()}
-              >
-                {spaFillSaving ? "Saving…" : "Save"}
-              </button>
             </div>
-            <p id={`spa-fill-hint-${propertySlug}`} className={styles.spaFillHint}>
-              Type digits only (auto-formats to H:MM).
+            <p className={styles.spaFillTarget} aria-live="polite">
+              {spaFillTargetLine}
             </p>
+            <div className={styles.spaFillRow}>
+              <div className={styles.spaFillSelectCol}>
+                <label
+                  className={styles.spaFillSubLabel}
+                  htmlFor={`spa-fill-hours-${propertySlug}`}
+                >
+                  Hours
+                </label>
+                <select
+                  id={`spa-fill-hours-${propertySlug}`}
+                  className={styles.spaFillSelect}
+                  value={spaFillHours}
+                  onChange={(e) => {
+                    setSpaFillHours(Number(e.target.value));
+                    setSpaFillError("");
+                  }}
+                  aria-invalid={Boolean(spaFillError)}
+                  aria-describedby={
+                    spaFillError ? `spa-fill-err-${propertySlug}` : undefined
+                  }
+                >
+                  {SPA_FILL_HOUR_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.spaFillSelectCol}>
+                <label
+                  className={styles.spaFillSubLabel}
+                  htmlFor={`spa-fill-min-${propertySlug}`}
+                >
+                  Minutes
+                </label>
+                <select
+                  id={`spa-fill-min-${propertySlug}`}
+                  className={styles.spaFillSelect}
+                  value={spaFillMinuteStep}
+                  onChange={(e) => {
+                    setSpaFillMinuteStep(Number(e.target.value));
+                    setSpaFillError("");
+                  }}
+                  aria-invalid={Boolean(spaFillError)}
+                  aria-describedby={
+                    spaFillError ? `spa-fill-err-${propertySlug}` : undefined
+                  }
+                >
+                  {SPA_FILL_MINUTE_STEP_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.spaFillSaveWrap}>
+                <span
+                  className={`${styles.spaFillSubLabel} ${styles.spaFillSubLabelGhost}`}
+                  aria-hidden
+                >
+                  Save
+                </span>
+                <button
+                  type="button"
+                  className={styles.spaFillSave}
+                  disabled={spaFillSaving}
+                  onClick={() => void handleSaveSpaFill()}
+                >
+                  {spaFillSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
             {spaFillError ? (
               <p id={`spa-fill-err-${propertySlug}`} className={styles.spaFillErr} role="alert">
                 {spaFillError}

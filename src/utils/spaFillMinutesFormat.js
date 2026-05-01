@@ -1,110 +1,68 @@
 /**
- * Typical spa fill duration stored on `properties.spa_fill_minutes` (total minutes).
- * UI uses H:MM (e.g. 0:45, 1:25); DB stores integer minutes only.
+ * Typical spa fill duration on `properties.spa_fill_minutes` (total minutes, integer).
+ * Technician UI: hours (0–2) × minutes (0,10,…,50); max 2h 50m = 170.
  */
 
-const MAX_TOTAL_MINUTES = 99999;
+/** @type {readonly [0, 1, 2]} */
+export const SPA_FILL_HOUR_OPTIONS = Object.freeze([0, 1, 2]);
 
-function clampMinutes(n) {
+/** @type {readonly [0, 10, 20, 30, 40, 50]} */
+export const SPA_FILL_MINUTE_STEP_OPTIONS = Object.freeze([0, 10, 20, 30, 40, 50]);
+
+const MAX_SPA_FILL_TOTAL = 2 * 60 + 50;
+
+function clampIncomingTotal(n) {
   if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.min(Math.floor(n), MAX_TOTAL_MINUTES);
+  return Math.min(Math.floor(n), MAX_SPA_FILL_TOTAL);
 }
 
 /**
+ * Map DB minutes to the nearest valid dropdown pair (legacy values may not sit on the grid).
  * @param {unknown} totalMinutes
- * @returns {string} H:MM display (hours unbounded within cap; minutes zero-padded)
+ * @returns {{ hours: 0|1|2, minutes: 0|10|20|30|40|50 }}
  */
-export function spaFillMinutesToDisplay(totalMinutes) {
-  const capped = clampMinutes(Number(totalMinutes));
-  const h = Math.floor(capped / 60);
-  const m = capped % 60;
-  return `${h}:${String(m).padStart(2, "0")}`;
-}
-
-/**
- * Digit-entry format for spa fill time.
- *
- * Rules:
- * - user types digits only (no colon required)
- * - hours is 0–9 (single digit max)
- * - last two digits are minutes (00–59)
- * - 45  -> 0:45
- * - 100 -> 1:00
- * - 125 -> 1:25
- *
- * @param {string} digits
- * @returns {number | null} total minutes, or null if invalid
- */
-export function parseSpaFillDigitsToMinutes(digits) {
-  const raw = String(digits ?? "").replace(/\D/g, "").slice(0, 3);
-  if (!raw) return null;
-
-  if (raw.length <= 2) {
-    const mm = Number(raw);
-    if (!Number.isInteger(mm) || mm < 0 || mm > 59) return null;
-    return clampMinutes(mm);
+export function totalMinutesToDropdownValues(totalMinutes) {
+  const target = clampIncomingTotal(Number(totalMinutes));
+  let bestH = 0;
+  let bestM = 0;
+  let bestDist = Infinity;
+  for (const h of SPA_FILL_HOUR_OPTIONS) {
+    for (const m of SPA_FILL_MINUTE_STEP_OPTIONS) {
+      const t = h * 60 + m;
+      const d = Math.abs(t - target);
+      if (d < bestDist || (d === bestDist && t < bestH * 60 + bestM)) {
+        bestDist = d;
+        bestH = h;
+        bestM = m;
+      }
+    }
   }
-
-  const h = Number(raw[0]);
-  const mm = Number(raw.slice(1));
-  if (!Number.isInteger(h) || h < 0 || h > 9) return null;
-  if (!Number.isInteger(mm) || mm < 0 || mm > 59) return null;
-  return clampMinutes(h * 60 + mm);
+  return { hours: bestH, minutes: bestM };
 }
 
 /**
- * @param {string} digits
- * @returns {string} H:MM display for digit-entry (empty => "")
+ * @param {number} hours
+ * @param {number} minutes
+ * @returns {number}
  */
-export function spaFillDigitsToDisplay(digits) {
-  const raw = String(digits ?? "").replace(/\D/g, "").slice(0, 3);
-  if (!raw) return "";
-  const minutes = parseSpaFillDigitsToMinutes(raw);
-  if (minutes === null) {
-    // Show best-effort formatting while typing, even if invalid (e.g. 99).
-    const padded = raw.length === 1 ? `0${raw}` : raw;
-    if (padded.length <= 2) return `0:${padded.padStart(2, "0")}`;
-    return `${padded[0]}:${padded.slice(1).padStart(2, "0")}`;
+export function dropdownValuesToTotalMinutes(hours, minutes) {
+  const h = SPA_FILL_HOUR_OPTIONS.includes(hours) ? hours : 0;
+  const m = SPA_FILL_MINUTE_STEP_OPTIONS.includes(minutes) ? minutes : 0;
+  return h * 60 + m;
+}
+
+/**
+ * Preview line: H:MM when hours ≥ 1; otherwise "N min" for sub-hour targets.
+ * @param {number} totalMinutes
+ */
+export function formatSpaFillTargetPreview(totalMinutes) {
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
+    return "Target: 0 min";
   }
-  return spaFillMinutesToDisplay(minutes);
-}
-
-/**
- * @param {unknown} totalMinutes
- * @returns {string} digits suitable for digit-entry input ("" when unset/0)
- */
-export function spaFillMinutesToDigits(totalMinutes) {
-  const capped = clampMinutes(Number(totalMinutes));
-  if (!capped) return "";
-  const h = Math.floor(capped / 60);
-  const m = capped % 60;
-  if (h <= 0) return String(m);
-  return `${String(h).slice(0, 1)}${String(m).padStart(2, "0")}`;
-}
-
-/**
- * Parse timer-style H:MM. Minutes must be 0–59.
- *
- * @param {string} text
- * @returns {number | null} total minutes, or null if invalid
- */
-export function parseSpaFillDisplayToMinutes(text) {
-  const s = String(text ?? "").trim();
-  if (!s) return null;
-  const match = /^\s*(\d+)\s*:\s*([0-5]?\d)\s*$/.exec(s);
-  if (!match) return null;
-  const h = Number(match[1]);
-  const mm = Number(match[2]);
-  if (!Number.isInteger(h) || h < 0 || !Number.isInteger(mm) || mm < 0 || mm > 59) {
-    return null;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h >= 1) {
+    return `Target: ${h}:${String(m).padStart(2, "0")}`;
   }
-  return clampMinutes(h * 60 + mm);
-}
-
-/**
- * @param {string} text
- * @returns {boolean}
- */
-export function isValidSpaFillDisplay(text) {
-  return parseSpaFillDisplayToMinutes(text) !== null;
+  return `Target: ${m} min`;
 }

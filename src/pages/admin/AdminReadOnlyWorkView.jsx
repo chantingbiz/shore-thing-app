@@ -4,6 +4,7 @@ import ServicePhotoGallery from "../../components/ServicePhotoGallery.jsx";
 import galleryStyles from "../../components/ServicePhotoGallery.module.css";
 import { servicePhotoItemsFromRow } from "../../utils/servicePhotoSlots.js";
 import { formatHoseElapsed, getPoolStart, getSpaStart } from "../../utils/hoseTimers.js";
+import { formatPoolClarifierWithUnit } from "../../utils/poolClarifierDisplay.js";
 import styles from "./AdminReadOnlyWorkView.module.css";
 
 const POOL_KEYS = [
@@ -202,7 +203,7 @@ export default function AdminReadOnlyWorkView({
           <div className={styles.chemRow}>
             <span className={styles.rowLab}>Clarifier</span>
             <span className={styles.chemVal}>
-              {trimmedPoolClarifier(serviceLog?.pool_clarifier)} bottle
+              {formatPoolClarifierWithUnit(trimmedPoolClarifier(serviceLog?.pool_clarifier))}
             </span>
           </div>
         ) : null}
