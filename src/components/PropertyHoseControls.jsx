@@ -38,8 +38,8 @@ export default function PropertyHoseControls({
   const [poolActive, setPoolActive] = useState(false);
   const [spaActive, setSpaActive] = useState(false);
 
-  const [spaFillDraft, setSpaFillDraft] = useState("0:00");
   const [spaFillDigits, setSpaFillDigits] = useState("");
+  const [spaFillFocused, setSpaFillFocused] = useState(false);
   const [spaFillError, setSpaFillError] = useState("");
   const [spaFillSaving, setSpaFillSaving] = useState(false);
 
@@ -55,7 +55,6 @@ export default function PropertyHoseControls({
   useEffect(() => {
     const nextDigits = spaFillMinutesToDigits(spaFillMinutes);
     setSpaFillDigits(nextDigits);
-    setSpaFillDraft(spaFillMinutesToDisplay(spaFillMinutes));
     setSpaFillError("");
   }, [propertyId, spaFillMinutes]);
 
@@ -126,8 +125,8 @@ export default function PropertyHoseControls({
   const handleSaveSpaFill = async () => {
     const pid = String(propertyId ?? "").trim();
     if (!pid) return;
-    const minutes = parseSpaFillDigitsToMinutes(spaFillDigits);
-    if (minutes === null) {
+    const minutes = spaFillDigits ? parseSpaFillDigitsToMinutes(spaFillDigits) : 0;
+    if (spaFillDigits && minutes === null) {
       setSpaFillError("Enter digits only. Examples: 45 → 0:45, 125 → 1:25.");
       return;
     }
@@ -140,13 +139,15 @@ export default function PropertyHoseControls({
       }
       const saved = row?.spa_fill_minutes ?? minutes;
       setSpaFillDigits(spaFillMinutesToDigits(saved));
-      setSpaFillDraft(spaFillMinutesToDisplay(saved));
     } catch (e) {
       setSpaFillError(e?.message ? String(e.message) : "Could not save.");
     } finally {
       setSpaFillSaving(false);
     }
   };
+
+  const spaFillDisplay = spaFillDigitsToDisplay(spaFillDigits);
+  const spaFillValue = spaFillFocused ? spaFillDisplay : spaFillDisplay || "0:00";
 
   return (
     <section className={styles.wrap} aria-label="Hose controls">
@@ -196,18 +197,31 @@ export default function PropertyHoseControls({
               <input
                 id={`spa-fill-${propertySlug}`}
                 className={styles.spaFillInput}
-                type="text"
+                type="tel"
                 inputMode="numeric"
+                pattern="\d*"
                 autoComplete="off"
-                placeholder="digits (e.g. 125)"
-                value={spaFillDraft}
+                placeholder="0:00"
+                value={spaFillValue}
                 onChange={(e) => {
-                  const digits = String(e.target.value ?? "").replace(/\D/g, "").slice(0, 3);
+                  const digits = String(e.target.value ?? "")
+                    .replace(/\D/g, "")
+                    .slice(0, 3);
                   setSpaFillDigits(digits);
-                  const nextDisplay = spaFillDigitsToDisplay(digits);
-                  setSpaFillDraft(nextDisplay || "0:00");
                   setSpaFillError("");
                 }}
+                onFocus={(e) => {
+                  setSpaFillFocused(true);
+                  // On mobile, focusing doesn't always select; defer to next tick.
+                  window.setTimeout(() => {
+                    try {
+                      e.target.select?.();
+                    } catch {
+                      // ignore
+                    }
+                  }, 0);
+                }}
+                onBlur={() => setSpaFillFocused(false)}
                 aria-invalid={Boolean(spaFillError)}
                 aria-describedby={
                   spaFillError
