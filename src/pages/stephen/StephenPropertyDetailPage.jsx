@@ -447,6 +447,14 @@ export default function StephenPropertyDetailPage() {
         }
       : null;
 
+  /** From the same `route_sheet_items` row as guest/check, pool heat, and route context. */
+  const routeSheetAdminNote = (() => {
+    const c = routeSheetRow?.comments;
+    if (c == null) return "";
+    const t = String(c).trim();
+    return t;
+  })();
+
   const displayTitle =
     property?.name ??
     (propertySlug ? String(propertySlug).replace(/-/g, " ") : "Property");
@@ -509,6 +517,15 @@ export default function StephenPropertyDetailPage() {
               serviceLogRow={effectiveServiceLogRow}
               serviceLogsReady={combinedLogsReady}
             />
+            {routeSheetAdminNote ? (
+              <section
+                className={styles.adminNote}
+                aria-label="Admin note"
+              >
+                <h2 className={styles.adminNoteLabel}>Admin note</h2>
+                <p className={styles.adminNoteText}>{routeSheetAdminNote}</p>
+              </section>
+            ) : null}
           </>
         ) : null}
       </div>
