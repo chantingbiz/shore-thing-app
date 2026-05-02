@@ -8,6 +8,7 @@ import {
   upsertServiceLog,
   updateRouteSettings,
 } from "./api.js";
+import { getTodayEasternDate } from "./easternDate.js";
 import { supabase } from "./supabaseClient.js";
 
 function makeEmitter() {
@@ -216,28 +217,41 @@ export function getRouteSettingsRow(propertyId) {
   return routeSettingsCache.byPropertyId.get(propertyId) ?? null;
 }
 
-export async function patchServiceLog(techSlug, propertyId, patch) {
+/**
+ * @param {string} [serviceDateYmdOpt] Eastern `YYYY-MM-DD` row to patch; omit for Eastern today-only cache UX
+ */
+export async function patchServiceLog(techSlug, propertyId, patch, serviceDateYmdOpt) {
   const idKey = serviceLogPropertyIdKey(propertyId);
   if (!techSlug || !idKey) return { ok: false };
 
-  // optimistic cache update
-  const prev = getServiceLogRow(techSlug, idKey) ?? {
-    property_id: idKey,
-    technician_slug: techSlug,
-  };
-  const next = { ...prev, ...patch };
+  const todayY = getTodayEasternDate();
+  const targetDay = String(serviceDateYmdOpt ?? "").trim() || todayY;
+  const usesTodayStore = targetDay === todayY;
+
+  /** Optimistic merge only shapes the technician “today” cache; other dates reconcile after refetch. */
+  const cachedRow = getServiceLogRow(techSlug, idKey);
+  const prev =
+    usesTodayStore && cachedRow != null && typeof cachedRow === "object"
+      ? cachedRow
+      : { property_id: idKey, technician_slug: techSlug };
+  const next = { ...prev, ...patch, service_date: targetDay };
+
   const block = serviceLogsByTech.get(techSlug) ?? {
     loadedAt: 0,
     rowsByPropertyId: new Map(),
   };
-  block.rowsByPropertyId.set(idKey, next);
-  serviceLogsByTech.set(techSlug, block);
+  if (usesTodayStore) {
+    block.rowsByPropertyId.set(idKey, next);
+    serviceLogsByTech.set(techSlug, block);
+  }
   emitter.emit();
 
   try {
-    const saved = await upsertServiceLog(idKey, techSlug, patch);
-    block.rowsByPropertyId.set(idKey, saved ?? next);
-    serviceLogsByTech.set(techSlug, block);
+    const saved = await upsertServiceLog(idKey, techSlug, patch, targetDay);
+    if (usesTodayStore) {
+      block.rowsByPropertyId.set(idKey, saved ?? next);
+      serviceLogsByTech.set(techSlug, block);
+    }
     emitter.emit();
     return { ok: true, data: saved ?? next };
   } catch (e) {

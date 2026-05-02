@@ -29,6 +29,10 @@ export default function PropertyHoseControls({
   enableActivityLog = false,
   /** When set, shows editable typical spa fill time (property-level, not service_logs). */
   propertyId = "",
+  /** Eastern `YYYY-MM-DD` for hose timestamps on `service_logs` when not today-only. */
+  hoseServiceDateYmd = undefined,
+  /** Hydrate hoses from routed `effectiveServiceLogRow` when `hoseServiceDateYmd` is set. */
+  serviceLogRowForHoses = undefined,
   spaFillMinutes = undefined,
   /** Called after a successful save with the updated property row (or partial). */
   onPropertySpaFillUpdated = undefined,
@@ -45,13 +49,30 @@ export default function PropertyHoseControls({
   const [spaFillSaving, setSpaFillSaving] = useState(false);
 
   useEffect(() => {
-    const poolTs = getPoolStart(technicianSlug, propertySlug);
-    const spaTs = getSpaStart(technicianSlug, propertySlug);
-    poolStartRef.current = poolTs;
-    spaStartRef.current = spaTs;
-    setPoolActive(poolTs != null);
-    setSpaActive(spaTs != null);
-  }, [propertySlug, technicianSlug]);
+    const useRow =
+      hoseServiceDateYmd != null &&
+      serviceLogRowForHoses &&
+      typeof serviceLogRowForHoses === "object";
+
+    if (useRow) {
+      const pi = Date.parse(String(serviceLogRowForHoses.pool_hose_started_at ?? ""));
+      const si = Date.parse(String(serviceLogRowForHoses.spa_hose_started_at ?? ""));
+      poolStartRef.current = Number.isFinite(pi) ? pi : null;
+      spaStartRef.current = Number.isFinite(si) ? si : null;
+    } else {
+      poolStartRef.current = getPoolStart(technicianSlug, propertySlug);
+      spaStartRef.current = getSpaStart(technicianSlug, propertySlug);
+    }
+    setPoolActive(poolStartRef.current != null);
+    setSpaActive(spaStartRef.current != null);
+  }, [
+    propertySlug,
+    technicianSlug,
+    hoseServiceDateYmd,
+    serviceLogRowForHoses,
+    serviceLogRowForHoses?.pool_hose_started_at,
+    serviceLogRowForHoses?.spa_hose_started_at,
+  ]);
 
   useEffect(() => {
     const { hours, minutes } = totalMinutesToDropdownValues(spaFillMinutes);
@@ -93,13 +114,13 @@ export default function PropertyHoseControls({
   const togglePool = () => {
     if (poolActive) {
       logHose("pool_hose_stopped", "Removed pool hose");
-      clearPool(technicianSlug, propertySlug);
+      clearPool(technicianSlug, propertySlug, hoseServiceDateYmd);
       poolStartRef.current = null;
       setPoolActive(false);
     } else {
       logHose("pool_hose_started", "Dropped pool hose");
       const ts = Date.now();
-      setPoolStart(technicianSlug, propertySlug, ts);
+      setPoolStart(technicianSlug, propertySlug, ts, hoseServiceDateYmd);
       poolStartRef.current = ts;
       setPoolActive(true);
     }
@@ -110,13 +131,13 @@ export default function PropertyHoseControls({
   const toggleSpa = () => {
     if (spaActive) {
       logHose("spa_hose_stopped", "Removed spa hose");
-      clearSpa(technicianSlug, propertySlug);
+      clearSpa(technicianSlug, propertySlug, hoseServiceDateYmd);
       spaStartRef.current = null;
       setSpaActive(false);
     } else {
       logHose("spa_hose_started", "Dropped spa hose");
       const ts = Date.now();
-      setSpaStart(technicianSlug, propertySlug, ts);
+      setSpaStart(technicianSlug, propertySlug, ts, hoseServiceDateYmd);
       spaStartRef.current = ts;
       setSpaActive(true);
     }

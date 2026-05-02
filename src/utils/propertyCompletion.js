@@ -1,4 +1,5 @@
 import { getStephenPropertyBySlug } from "../data/stephenProperties.js";
+import { getServiceLogsForTechnicianPropertiesDateRange } from "../lib/api.js";
 import {
   getServiceLogRow,
   insertActivity,
@@ -6,6 +7,7 @@ import {
   primePropertiesBySlug,
   resolveDbPropertyId,
 } from "../lib/supabaseStore.js";
+import { getTodayEasternDate } from "../lib/easternDate.js";
 import { getLocalDayKey } from "./localDay.js";
 
 /**
@@ -28,12 +30,14 @@ function completionPropertySlug(techSlug, propertySlug) {
  * @param {string} propertySlug
  * @param {boolean} completed
  * @param {string} [dayKey]
+ * @param {{ serviceDateYmd?: string }} [opts] Eastern `YYYY-MM-DD` row to patch (route-sheet early work).
  */
-export function setPropertyCompletedForDay(
+export async function setPropertyCompletedForDay(
   techSlug,
   propertySlug,
   completed,
-  dayKey = getLocalDayKey()
+  dayKey = getLocalDayKey(),
+  opts = {}
 ) {
   void dayKey;
   if (!techSlug || !propertySlug) return;
@@ -41,30 +45,44 @@ export function setPropertyCompletedForDay(
   if (!slug) return;
   primePropertiesBySlug([slug]);
   const resolved = resolveDbPropertyId(slug);
+  const serviceDate = String(opts.serviceDateYmd ?? "").trim() || getTodayEasternDate();
   console.log("Supabase write preflight", {
     property_slug: slug,
     property_id: resolved,
-    service_date: getLocalDayKey(),
+    service_date: serviceDate,
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
   const nowIso = new Date().toISOString();
-  const row = getServiceLogRow(techSlug, resolved);
+  /** @type {Record<string, unknown>} */
   const patch = {
     completed: !!completed,
     completed_at: completed ? nowIso : null,
   };
+
   if (completed) {
-    if (row?.pool_hose_started_at != null) {
-      patch.pool_hose_started_at = null;
-      void insertActivity(techSlug, resolved, "pool_hose_stopped", "Removed pool hose");
-    }
-    if (row?.spa_hose_started_at != null) {
-      patch.spa_hose_started_at = null;
-      void insertActivity(techSlug, resolved, "spa_hose_stopped", "Removed spa hose");
+    try {
+      const rows = await getServiceLogsForTechnicianPropertiesDateRange(
+        techSlug.toLowerCase(),
+        [resolved],
+        serviceDate,
+        serviceDate
+      );
+      const rowOne = rows[0];
+      if (rowOne?.pool_hose_started_at != null) {
+        patch.pool_hose_started_at = null;
+        void insertActivity(techSlug, resolved, "pool_hose_stopped", "Removed pool hose");
+      }
+      if (rowOne?.spa_hose_started_at != null) {
+        patch.spa_hose_started_at = null;
+        void insertActivity(techSlug, resolved, "spa_hose_stopped", "Removed spa hose");
+      }
+    } catch (e) {
+      console.error("[setPropertyCompletedForDay] could not preload hose timestamps", e);
     }
   }
-  void patchServiceLog(techSlug, resolved, patch);
+
+  await patchServiceLog(techSlug, resolved, patch, serviceDate);
 }
 
 export function isPropertyCompletedToday(

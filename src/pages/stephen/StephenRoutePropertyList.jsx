@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRouteSheetItemsForWeek } from "../../lib/api.js";
 import { getTodayEasternDate } from "../../lib/easternDate.js";
-import {
-  getActiveRouteSheetSaturdayEastern,
-  serviceDatesForRouteTypeInSheetWeek,
-} from "../../lib/routeSheetWeek.js";
+import { getActiveRouteSheetSaturdayEastern } from "../../lib/routeSheetWeek.js";
 import {
   ensurePropertiesById,
   ensurePropertiesBySlug,
@@ -33,7 +30,9 @@ import {
   getRouteCardBadgeLabel,
   getRouteInstanceStatus,
   mergeRealtimeTodayServiceLogsIntoIndex,
+  pickTechnicianRouteDetailServiceLog,
   routeListSortTier,
+  technicianRouteSheetCalendarDateSet,
 } from "../../utils/routeInstanceStatus.js";
 import { technicianPropertyDetailPath } from "../../utils/technicianRoutePaths.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
@@ -56,6 +55,7 @@ const TECH_SLUG = "stephen";
  *   spaFillMinutes: number | null,
  *   routeSheet: { guest_check?: string | null, pool_heat?: string | null },
  *   adminNote: string,
+ *   weekStartDate: string,
  * }} RouteListEntry
  */
 
@@ -75,9 +75,10 @@ export default function StephenRoutePropertyList({ routeType }) {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   /** Cycles 0→2 for ".", "..", "..." on the visit loading line */
   const [loadingDotsPhase, setLoadingDotsPhase] = useState(0);
-  /** Route-scoped status per property slug (completion / live hose / in-progress work). */
+  /** Route-scoped status per property slug (completion / live hose / in-progress work / Finish Job gate). */
   const [instanceBySlug, setInstanceBySlug] = useState(
-    /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean }>} */ ({})
+    /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean, allowFinishJob: boolean, effectiveServiceDate: string | null }>} */
+    ({})
   );
   /** Show route sheet `comments` on list tiles (detail page unchanged). */
   const [showAdminNotes, setShowAdminNotes] = useState(false);
@@ -97,6 +98,9 @@ export default function StephenRoutePropertyList({ routeType }) {
         ...new Set(listRows.map((r) => String(r.property_id ?? "").trim()).filter(Boolean)),
       ];
       await ensurePropertiesById(propertyIds);
+
+      const sheetWeekAnchor =
+        String(listRows[0]?.week_start_date ?? "").trim() || week;
 
       /** @type {RouteListEntry[]} */
       const out = [];
@@ -128,6 +132,7 @@ export default function StephenRoutePropertyList({ routeType }) {
             pool_heat: item.pool_heat ?? null,
           },
           adminNote,
+          weekStartDate: sheetWeekAnchor,
         });
       });
 
@@ -187,31 +192,51 @@ export default function StephenRoutePropertyList({ routeType }) {
       return;
     }
     let cancelled = false;
-    const week = getActiveRouteSheetSaturdayEastern();
+    const sheetWeek =
+      String(routeList[0]?.weekStartDate ?? "").trim() || getActiveRouteSheetSaturdayEastern();
     const ids = routeList.map((p) => String(p.id ?? "").trim()).filter(Boolean);
     void (async () => {
       try {
         const { logsByPropertyAndDate, activityDatesByProperty } = await fetchRouteInstanceContext(
           TECH_SLUG,
-          week,
+          sheetWeek,
           routeType,
           ids
         );
-        mergeRealtimeTodayServiceLogsIntoIndex(TECH_SLUG, logsByPropertyAndDate, ids);
+        mergeRealtimeTodayServiceLogsIntoIndex(
+          TECH_SLUG,
+          logsByPropertyAndDate,
+          ids,
+          getTodayEasternDate(),
+          technicianRouteSheetCalendarDateSet(TECH_SLUG, routeType, sheetWeek)
+        );
         if (cancelled) return;
         const todayY = getTodayEasternDate();
-        /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean }>} */
+        /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean, allowFinishJob: boolean, effectiveServiceDate: string | null }>} */
         const next = {};
         for (const p of routeList) {
-          next[p.slug] = getRouteInstanceStatus({
+          const picked = pickTechnicianRouteDetailServiceLog({
+            technicianSlug: TECH_SLUG,
             propertyId: String(p.id ?? "").trim(),
-            weekStartDate: week,
+            weekStartDate: sheetWeek,
             routeType,
             logsByPropertyAndDate,
-            activityDatesByProperty,
-            todayRowOverride: null,
-            todayEasternYmd: todayY,
           });
+          const eff =
+            picked?.service_date != null ? String(picked.service_date).trim() : "";
+          next[p.slug] = {
+            ...getRouteInstanceStatus({
+              propertyId: String(p.id ?? "").trim(),
+              weekStartDate: sheetWeek,
+              routeType,
+              logsByPropertyAndDate,
+              activityDatesByProperty,
+              todayRowOverride: null,
+              todayEasternYmd: todayY,
+              technicianSlug: TECH_SLUG,
+            }),
+            effectiveServiceDate: eff || null,
+          };
         }
         setInstanceBySlug(next);
       } catch (e) {
@@ -231,11 +256,13 @@ export default function StephenRoutePropertyList({ routeType }) {
         isCompleted: false,
         isLive: false,
         isInProgress: false,
+        allowFinishJob: false,
       };
       const sb = instanceBySlug[b.slug] ?? {
         isCompleted: false,
         isLive: false,
         isInProgress: false,
+        allowFinishJob: false,
       };
       const ra = routeListSortTier({
         isGuest: a.isGuest,
@@ -259,13 +286,16 @@ export default function StephenRoutePropertyList({ routeType }) {
     setNow(Date.now());
   }, []);
 
-  const toggleCompleted = useCallback((p, e) => {
+  const toggleCompleted = useCallback(async (p, e) => {
     e.preventDefault();
     e.stopPropagation();
     flushPendingWorkNow();
     const st = instanceBySlug[p.slug];
     const next = !(st?.isCompleted ?? false);
-    setPropertyCompletedForDay(TECH_SLUG, p.slug, next);
+    const svc = st?.effectiveServiceDate ?? undefined;
+    await setPropertyCompletedForDay(TECH_SLUG, p.slug, next, undefined, {
+      serviceDateYmd: svc || undefined,
+    });
     if (next) {
       logTechnicianActivity(TECH_SLUG, {
         propertySlug: p.slug,
@@ -279,9 +309,6 @@ export default function StephenRoutePropertyList({ routeType }) {
 
   const titleSuffix = routeType === "turnover" ? "Turnover" : "Midweek";
   const showEmptyMessage = !routeSheetLoading && !loadError && sorted.length === 0;
-  const weekAnchor = getActiveRouteSheetSaturdayEastern();
-  const routeServiceDates = serviceDatesForRouteTypeInSheetWeek(weekAnchor, routeType);
-  const todayInRouteWindow = routeServiceDates.includes(getTodayEasternDate());
   const loadingVisitDataLabel = `Loading visit data${".".repeat(loadingDotsPhase + 1)}`;
 
   return (
@@ -375,8 +402,10 @@ export default function StephenRoutePropertyList({ routeType }) {
               isCompleted: false,
               isLive: false,
               isInProgress: false,
+              allowFinishJob: false,
             };
             const completed = st.isCompleted;
+            const canFinishOrReopen = st.allowFinishJob;
             const badgeLabel = getRouteCardBadgeLabel(st);
 
             return (
@@ -414,17 +443,17 @@ export default function StephenRoutePropertyList({ routeType }) {
                       <button
                         type="button"
                         className={`${glass.glassBtn} ${styles.jobGlassBtn} ${
-                          !todayInRouteWindow ? styles.jobGlassBtnDisabled : ""
+                          !canFinishOrReopen ? styles.jobGlassBtnDisabled : ""
                         }`}
                         aria-label={
                           completed
                             ? "Reopen job — mark property not completed for today"
                             : "Finish job — mark property completed for today"
                         }
-                        disabled={!todayInRouteWindow}
+                        disabled={!canFinishOrReopen}
                         title={
-                          !todayInRouteWindow
-                            ? "Finish / reopen is only available on scheduled days for this route sheet."
+                          !canFinishOrReopen
+                            ? "Available on scheduled route days, or after you start work on this property today (timer, readings, etc.)."
                             : undefined
                         }
                         onClick={(e) => toggleCompleted(p, e)}

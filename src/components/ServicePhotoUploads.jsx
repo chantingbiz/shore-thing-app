@@ -101,6 +101,10 @@ export default function ServicePhotoUploads({
       setError(null);
       setBusySlot(slotDef.slot);
       try {
+        const svcDate =
+          serviceLogRow?.service_date != null
+            ? String(serviceLogRow.service_date).trim() || undefined
+            : undefined;
         const { publicUrl } = await uploadServicePhoto(file, {
           propertyId,
           slot: slotDef.slot,
@@ -108,9 +112,14 @@ export default function ServicePhotoUploads({
         });
         console.log("[service photo] saving URL to column", slotDef.column, publicUrl);
 
-        const saved = await patchServiceLog(technicianSlug, propertyId, {
-          [slotDef.column]: publicUrl,
-        });
+        const saved = await patchServiceLog(
+          technicianSlug,
+          propertyId,
+          {
+            [slotDef.column]: publicUrl,
+          },
+          svcDate
+        );
         console.log("[service photo] database update", saved);
 
         if (!saved?.ok) {
@@ -132,7 +141,7 @@ export default function ServicePhotoUploads({
         if (ref) ref.value = "";
       }
     },
-    [propertySlug, propertyName, technicianSlug, serviceLogRow?.id]
+    [propertySlug, propertyName, technicianSlug, serviceLogRow?.id, serviceLogRow?.service_date]
   );
 
   return (

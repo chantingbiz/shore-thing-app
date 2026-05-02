@@ -28,58 +28,69 @@ export function getSpaStart(techSlug, propertyId) {
   return Number.isFinite(t) ? t : null;
 }
 
-export function setPoolStart(techSlug, propertyId, timestampMs) {
+/**
+ * @param {string | undefined} [serviceDateYmd] Eastern calendar row on `service_logs`
+ */
+export function setPoolStart(techSlug, propertyId, timestampMs, serviceDateYmd) {
   primePropertiesBySlug([propertyId]);
   const resolved = resolveDbPropertyId(propertyId);
+  const svc =
+    String(serviceDateYmd ?? "").trim() || getTodayEasternDate();
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: getTodayEasternDate(),
+    service_date: svc,
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
   const iso = new Date(timestampMs).toISOString();
-  void patchServiceLog(techSlug, resolved, { pool_hose_started_at: iso });
+  void patchServiceLog(techSlug, resolved, { pool_hose_started_at: iso }, svc);
 }
 
-export function setSpaStart(techSlug, propertyId, timestampMs) {
+export function setSpaStart(techSlug, propertyId, timestampMs, serviceDateYmd) {
   primePropertiesBySlug([propertyId]);
   const resolved = resolveDbPropertyId(propertyId);
+  const svc =
+    String(serviceDateYmd ?? "").trim() || getTodayEasternDate();
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: getTodayEasternDate(),
+    service_date: svc,
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
   const iso = new Date(timestampMs).toISOString();
-  void patchServiceLog(techSlug, resolved, { spa_hose_started_at: iso });
+  void patchServiceLog(techSlug, resolved, { spa_hose_started_at: iso }, svc);
 }
 
-export function clearPool(techSlug, propertyId) {
+export function clearPool(techSlug, propertyId, serviceDateYmd) {
   primePropertiesBySlug([propertyId]);
   const resolved = resolveDbPropertyId(propertyId);
+  const svc =
+    String(serviceDateYmd ?? "").trim() || getTodayEasternDate();
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: getTodayEasternDate(),
+    service_date: svc,
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
-  void patchServiceLog(techSlug, resolved, { pool_hose_started_at: null });
+  void patchServiceLog(techSlug, resolved, { pool_hose_started_at: null }, svc);
 }
 
-export function clearSpa(techSlug, propertyId) {
+export function clearSpa(techSlug, propertyId, serviceDateYmd) {
   primePropertiesBySlug([propertyId]);
   const resolved = resolveDbPropertyId(propertyId);
+  const svc =
+    String(serviceDateYmd ?? "").trim() || getTodayEasternDate();
   console.log("Supabase write preflight", {
     property_slug: propertyId,
     property_id: resolved,
-    service_date: getTodayEasternDate(),
+    service_date: svc,
     onConflict: "property_id,service_date",
   });
   if (!resolved) return;
-  void patchServiceLog(techSlug, resolved, { spa_hose_started_at: null });
+  void patchServiceLog(techSlug, resolved, { spa_hose_started_at: null }, svc);
 }
 
 /** Elapsed whole seconds from start timestamp to now */

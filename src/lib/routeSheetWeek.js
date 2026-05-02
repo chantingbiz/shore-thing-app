@@ -23,6 +23,20 @@ export function serviceDatesForRouteTypeInSheetWeek(weekStartSaturdayYmd, routeT
   return Array.from({ length: 5 }, (_, i) => addGregorianDaysToYmd(w, 2 + i));
 }
 
+/**
+ * Eastern `YYYY-MM-DD` for the single Sat–Fri operational week of a sent sheet
+ * (`week_start_date` Saturday through `week_start_date + 6`). Technician `service_logs` are scoped to
+ * this window only — not prior weeks.
+ *
+ * @param {string} weekStartSaturdayYmd Eastern Saturday anchor for `route_sheet_items.week_start_date`
+ * @returns {string[]}
+ */
+export function calendarDatesForRouteSheetWeek(weekStartSaturdayYmd) {
+  const w = String(weekStartSaturdayYmd ?? "").trim();
+  if (!w) return [];
+  return Array.from({ length: 7 }, (_, i) => addGregorianDaysToYmd(w, i));
+}
+
 /** Sat→Fri order; offsets match `ROUTE_DAY_KEY_OFFSET` (0 = Saturday of the active sheet week). */
 const ROUTE_SHEET_DAY_KEYS_IN_ORDER = Object.freeze([
   "saturday",

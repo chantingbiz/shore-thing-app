@@ -35,7 +35,6 @@ import {
   fetchRouteInstanceContext,
   pickTechnicianRouteDetailServiceLog,
 } from "../../utils/routeInstanceStatus.js";
-import { getLocalDayKey } from "../../utils/localDay.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import {
   getRouteTypeFromTechnicianPath,
@@ -214,17 +213,18 @@ export default function StephenPropertyDetailPage() {
     /** Do not set routeScopedLogReady false here — realtime refresh (nonce) must not blank the UI while refetching. */
     void (async () => {
       try {
-        const week = getActiveRouteSheetSaturdayEastern();
+        const rowWeek = String(routeSheetRow?.week_start_date ?? "").trim();
+        const weekForLogs = rowWeek || getActiveRouteSheetSaturdayEastern();
         const ctx = await fetchRouteInstanceContext(
           technicianSlug,
-          week,
+          weekForLogs,
           /** @type {'turnover'|'midweek'} */ (selectedRouteType),
           [String(dbProp.id)]
         );
         const picked = pickTechnicianRouteDetailServiceLog({
           technicianSlug,
           propertyId: String(dbProp.id),
-          weekStartDate: week,
+          weekStartDate: weekForLogs,
           routeType: /** @type {'turnover'|'midweek'} */ (selectedRouteType),
           logsByPropertyAndDate: ctx.logsByPropertyAndDate,
         });
@@ -331,24 +331,20 @@ export default function StephenPropertyDetailPage() {
   const handleWorkStateChange = useCallback(
     async (state) => {
       if (!property) return;
-      if (needsRouteSheetGate) {
-        const sd = effectiveServiceLogRow?.service_date;
-        if (
-          sd != null &&
-          String(sd).trim() &&
-          String(sd).trim() !== getTodayEasternDate()
-        ) {
-          return;
-        }
-      }
       const prop = property;
 
       primePropertiesBySlug([prop.slug]);
       const propertyId = resolveDbPropertyId(prop.slug);
+      const easternTarget =
+        needsRouteSheetGate &&
+        effectiveServiceLogRow?.service_date != null &&
+        String(effectiveServiceLogRow.service_date).trim()
+          ? String(effectiveServiceLogRow.service_date).trim()
+          : undefined;
       console.log("Supabase write preflight", {
         property_slug: prop.slug,
         property_id: propertyId,
-        service_date: getLocalDayKey(),
+        service_date: easternTarget ?? getTodayEasternDate(),
         onConflict: "property_id,service_date",
       });
       if (!propertyId) return;
@@ -363,7 +359,12 @@ export default function StephenPropertyDetailPage() {
         const full = mapWorkStateToServiceLogPatch(state);
         const patch = diffServiceLogPatch(base, full);
         if (Object.keys(patch).length > 0) {
-          const r = await patchServiceLog(technicianSlug, propertyId, patch);
+          const r = await patchServiceLog(
+            technicianSlug,
+            propertyId,
+            patch,
+            easternTarget
+          );
           if (r?.ok) {
             baselineWorkPatchRef.current = { ...base, ...patch };
           }
@@ -497,6 +498,16 @@ export default function StephenPropertyDetailPage() {
               propertyName={property.name}
               enableActivityLog
               propertyId={dbProp?.id != null ? String(dbProp.id) : ""}
+              hoseServiceDateYmd={
+                needsRouteSheetGate &&
+                effectiveServiceLogRow?.service_date != null &&
+                String(effectiveServiceLogRow.service_date).trim()
+                  ? String(effectiveServiceLogRow.service_date).trim()
+                  : undefined
+              }
+              serviceLogRowForHoses={
+                needsRouteSheetGate ? effectiveServiceLogRow : undefined
+              }
               spaFillMinutes={dbProp?.spa_fill_minutes}
               onPropertySpaFillUpdated={(row) => {
                 setDbProp((prev) => (prev && row ? { ...prev, ...row } : prev));

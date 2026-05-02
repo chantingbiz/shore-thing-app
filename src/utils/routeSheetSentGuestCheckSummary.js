@@ -1,8 +1,5 @@
 import { getRouteSheetItemsForWeek } from "../lib/api.js";
-import {
-  getActiveRouteSheetSaturdayEastern,
-  serviceDatesForRouteTypeInSheetWeek,
-} from "../lib/routeSheetWeek.js";
+import { getActiveRouteSheetSaturdayEastern } from "../lib/routeSheetWeek.js";
 import {
   ensurePropertiesById,
   ensureServiceLogsForToday,
@@ -14,6 +11,7 @@ import {
   getRouteInstanceStatus,
   mergeRealtimeTodayServiceLogsIntoIndex,
   serviceLogRowHasChemReadingsEntered,
+  technicianRouteSheetCalendarDateSet,
 } from "./routeInstanceStatus.js";
 
 /** Sent weekly rows only (dashboard sets `sent_at` on send). */
@@ -95,7 +93,8 @@ export async function fetchRouteSheetSentGuestCheckSummary(
     slug,
     logsByPropertyAndDate,
     propertyIds,
-    getTodayEasternDate()
+    getTodayEasternDate(),
+    technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate)
   );
 
   let guestTotal = 0;
@@ -117,6 +116,7 @@ export async function fetchRouteSheetSentGuestCheckSummary(
       routeType,
       logsByPropertyAndDate,
       activityDatesByProperty,
+      technicianSlug: slug,
     });
     const wip = !st.isCompleted && (st.isLive || st.isInProgress);
     if (isGuest) {
@@ -174,8 +174,8 @@ export async function fetchRouteSheetSentGuestCheckSummary(
 
 /**
  * True when at least one property on the sent+included workload for this route type has saved
- * readings or chemicals on a `service_logs` row for a `service_date` in that route type's sheet
- * week window. Hose timers, activity_logs-only, and photos do not count.
+ * readings or chemicals on a `service_logs` row for an Eastern `service_date` in `week_start_date`
+ * … `week_start_date+6`. Hose timers, activity_logs-only, and photos do not count.
  *
  * @param {string} technicianSlug
  * @param {'turnover'|'midweek'} routeType
@@ -220,13 +220,14 @@ export async function sentSheetHasChemReadingsEnteredForRouteWindow(
     slug,
     logsByPropertyAndDate,
     propertyIds,
-    getTodayEasternDate()
+    getTodayEasternDate(),
+    technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate)
   );
 
-  const dates = serviceDatesForRouteTypeInSheetWeek(weekStartDate, routeType);
+  const calendarSpan = [...technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate)];
   for (const pid of propertyIds) {
     const byDate = logsByPropertyAndDate.get(pid) ?? new Map();
-    for (const d of dates) {
+    for (const d of calendarSpan) {
       const row = /** @type {Record<string, unknown> | null} */ (byDate.get(d) ?? null);
       if (serviceLogRowHasChemReadingsEntered(row)) return true;
     }

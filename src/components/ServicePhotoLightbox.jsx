@@ -42,7 +42,7 @@ export default function ServicePhotoLightbox({ items, initialIndex, onClose }) {
     apply();
     const id = window.requestAnimationFrame(() => window.requestAnimationFrame(apply));
     return () => window.cancelAnimationFrame(id);
-  }, [initialIndex, itemsKey, items]);
+  }, [initialIndex, itemsKey, items.length]);
 
   const readIndexFromScroll = useCallback(() => {
     const el = scrollerRef.current;

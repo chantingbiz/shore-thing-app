@@ -200,8 +200,15 @@ export function workStateFromServiceLogRow(row) {
  * @param {string} techSlug
  * @param {object} patch
  */
-export async function upsertServiceLog(propertyId, techSlug, patch) {
-  const serviceDate = getTodayEasternDate();
+/**
+ * @param {string} propertyId uuid
+ * @param {string} techSlug
+ * @param {object} patch
+ * @param {string} [serviceDateYmdOpt] Eastern YYYY-MM-DD; defaults to today
+ */
+export async function upsertServiceLog(propertyId, techSlug, patch, serviceDateYmdOpt) {
+  const serviceDate =
+    String(serviceDateYmdOpt ?? "").trim() || getTodayEasternDate();
 
   const { data: existing, error: readError } = await supabase
     .from("service_logs")
