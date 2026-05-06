@@ -276,6 +276,41 @@ export default function StephenPropertyDetailPage() {
     technicianSlug,
   ]);
 
+  /**
+   * Single Eastern service_date for all route-gated Supabase patches on this page.
+   * Stephen Midweek: never leave blank — fall back to Eastern today so readings/chems/photos match
+   * hose rows (temporary isolation fix sometimes yields rows without `service_date` in memory).
+   * Stephen Turnover: keep explicit date when present (incl. May 1 emergency row); else omit.
+   */
+  const routeScopedServiceDateYmd = useMemo(() => {
+    if (!needsRouteSheetGate) return undefined;
+    const sd = String(effectiveServiceLogRow?.service_date ?? "").trim();
+    if (technicianSlug === "stephen" && selectedRouteType === "midweek") {
+      return sd || getTodayEasternDate();
+    }
+    return sd ? sd : undefined;
+  }, [
+    needsRouteSheetGate,
+    technicianSlug,
+    selectedRouteType,
+    effectiveServiceLogRow?.service_date,
+  ]);
+
+  /** Ensure photos/autosave always receive a concrete `service_date` when we know one. */
+  const effectiveServiceLogRowForWrites = useMemo(() => {
+    if (!effectiveServiceLogRow) return null;
+    if (String(effectiveServiceLogRow.service_date ?? "").trim()) {
+      return effectiveServiceLogRow;
+    }
+    if (routeScopedServiceDateYmd) {
+      return {
+        ...effectiveServiceLogRow,
+        service_date: routeScopedServiceDateYmd,
+      };
+    }
+    return effectiveServiceLogRow;
+  }, [effectiveServiceLogRow, routeScopedServiceDateYmd]);
+
   const combinedLogsReady =
     serviceLogsReady && (!needsRouteSheetGate || routeScopedLogReady);
 
@@ -335,16 +370,13 @@ export default function StephenPropertyDetailPage() {
 
       primePropertiesBySlug([prop.slug]);
       const propertyId = resolveDbPropertyId(prop.slug);
-      const easternTarget =
-        needsRouteSheetGate &&
-        effectiveServiceLogRow?.service_date != null &&
-        String(effectiveServiceLogRow.service_date).trim()
-          ? String(effectiveServiceLogRow.service_date).trim()
-          : undefined;
+      const patchServiceDate = needsRouteSheetGate
+        ? routeScopedServiceDateYmd
+        : undefined;
       console.log("Supabase write preflight", {
         property_slug: prop.slug,
         property_id: propertyId,
-        service_date: easternTarget ?? getTodayEasternDate(),
+        service_date: patchServiceDate ?? getTodayEasternDate(),
         onConflict: "property_id,service_date",
       });
       if (!propertyId) return;
@@ -354,20 +386,18 @@ export default function StephenPropertyDetailPage() {
       void poolHose;
       void spaHose;
 
-      const base = baselineWorkPatchRef.current;
-      if (base != null) {
-        const full = mapWorkStateToServiceLogPatch(state);
-        const patch = diffServiceLogPatch(base, full);
-        if (Object.keys(patch).length > 0) {
-          const r = await patchServiceLog(
-            technicianSlug,
-            propertyId,
-            patch,
-            easternTarget
-          );
-          if (r?.ok) {
-            baselineWorkPatchRef.current = { ...base, ...patch };
-          }
+      const base = baselineWorkPatchRef.current ?? emptyServiceLogWorkPatch();
+      const full = mapWorkStateToServiceLogPatch(state);
+      const patch = diffServiceLogPatch(base, full);
+      if (Object.keys(patch).length > 0) {
+        const r = await patchServiceLog(
+          technicianSlug,
+          propertyId,
+          patch,
+          patchServiceDate
+        );
+        if (r?.ok) {
+          baselineWorkPatchRef.current = { ...base, ...patch };
         }
       }
 
@@ -425,7 +455,7 @@ export default function StephenPropertyDetailPage() {
         });
       }
     },
-    [property, technicianSlug, needsRouteSheetGate, effectiveServiceLogRow]
+    [property, technicianSlug, needsRouteSheetGate, routeScopedServiceDateYmd]
   );
 
   if (!technician) {
@@ -499,14 +529,10 @@ export default function StephenPropertyDetailPage() {
               enableActivityLog
               propertyId={dbProp?.id != null ? String(dbProp.id) : ""}
               hoseServiceDateYmd={
-                needsRouteSheetGate &&
-                effectiveServiceLogRow?.service_date != null &&
-                String(effectiveServiceLogRow.service_date).trim()
-                  ? String(effectiveServiceLogRow.service_date).trim()
-                  : undefined
+                needsRouteSheetGate ? routeScopedServiceDateYmd : undefined
               }
               serviceLogRowForHoses={
-                needsRouteSheetGate ? effectiveServiceLogRow : undefined
+                needsRouteSheetGate ? effectiveServiceLogRowForWrites : undefined
               }
               spaFillMinutes={dbProp?.spa_fill_minutes}
               onPropertySpaFillUpdated={(row) => {
@@ -519,13 +545,13 @@ export default function StephenPropertyDetailPage() {
               propertySlug={slugForUi}
               propertyName={property.name}
               technicianSlug={technicianSlug}
-              serviceLogRow={effectiveServiceLogRow}
+              serviceLogRow={effectiveServiceLogRowForWrites}
             />
             <ReadingsForm
-              key={`${slugForUi}:${effectiveServiceLogRow?.id ?? "none"}:${String(effectiveServiceLogRow?.service_date ?? "")}`}
+              key={`${slugForUi}:${effectiveServiceLogRowForWrites?.id ?? "none"}:${String(effectiveServiceLogRowForWrites?.service_date ?? routeScopedServiceDateYmd ?? "")}`}
               idPrefix={slugForUi}
               onWorkStateChange={handleWorkStateChange}
-              serviceLogRow={effectiveServiceLogRow}
+              serviceLogRow={effectiveServiceLogRowForWrites}
               serviceLogsReady={combinedLogsReady}
             />
             {routeSheetAdminNote ? (
