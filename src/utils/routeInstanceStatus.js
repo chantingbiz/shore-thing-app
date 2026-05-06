@@ -39,13 +39,26 @@ export function getRouteCardBadgeLabel(status) {
  */
 const URGENT_STEPHEN_TURNOVER_EXTRA_SERVICE_DATE = "2026-05-01";
 
+/**
+ * TEMP (field urgent): Stephen Midweek must start fresh for the newly-sent run.
+ * Ignore any `service_logs` rows from older dates.
+ */
+const URGENT_STEPHEN_MIDWEEK_MIN_SERVICE_DATE = "2026-05-06";
+
 function serviceLogFetchDatesForTechnicianRoute(
   technicianSlug,
   routeType,
   weekStartSaturdayYmd
 ) {
-  const base = calendarDatesForRouteSheetWeek(weekStartSaturdayYmd);
   const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  if (slug === "stephen" && routeType === "midweek") {
+    const min = String(URGENT_STEPHEN_MIDWEEK_MIN_SERVICE_DATE).trim();
+    const today = getTodayEasternDate();
+    if (min && today && today >= min) return [today];
+    return [];
+  }
+
+  const base = calendarDatesForRouteSheetWeek(weekStartSaturdayYmd);
   const urgent = String(URGENT_STEPHEN_TURNOVER_EXTRA_SERVICE_DATE).trim();
   if (slug === "stephen" && routeType === "turnover" && urgent && !base.includes(urgent)) {
     return [...base, urgent];
@@ -53,7 +66,7 @@ function serviceLogFetchDatesForTechnicianRoute(
   return base;
 }
 
-/** Eastern YYYY-MM-DD set for merges + lookups (Stephen Turnover augments {@link calendarDatesForRouteSheetWeek}). */
+/** Eastern YYYY-MM-DD set for merges + lookups (includes temporary Stephen rules). */
 export function technicianRouteSheetCalendarDateSet(
   technicianSlug,
   routeType,
