@@ -32,8 +32,10 @@ import {
   isRouteSheetRowSent,
 } from "../../utils/routeSheetSentGuestCheckSummary.js";
 import {
-  fetchRouteInstanceContext,
+  fetchStephenPartitionedRouteInstanceContext,
+  mergeRealtimeStephenPartitioned,
   pickTechnicianRouteDetailServiceLog,
+  routeSheetItemRowHasLiveInstance,
 } from "../../utils/routeInstanceStatus.js";
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import {
@@ -215,18 +217,44 @@ export default function StephenPropertyDetailPage() {
       try {
         const rowWeek = String(routeSheetRow?.week_start_date ?? "").trim();
         const weekForLogs = rowWeek || getActiveRouteSheetSaturdayEastern();
-        const ctx = await fetchRouteInstanceContext(
+        const pidStr = String(dbProp.id);
+        const workload = [
+          {
+            property_id: pidStr,
+            id: String(routeSheetRow?.id ?? "").trim(),
+            route_sheet_instance_id: routeSheetRow?.route_sheet_instance_id ?? null,
+          },
+        ];
+        const partitioned = await fetchStephenPartitionedRouteInstanceContext(
           technicianSlug,
           weekForLogs,
           /** @type {'turnover'|'midweek'} */ (selectedRouteType),
-          [String(dbProp.id)]
+          workload
         );
+        mergeRealtimeStephenPartitioned({
+          technicianSlug,
+          routeType: /** @type {'turnover'|'midweek'} */ (selectedRouteType),
+          weekStartSaturdayYmd: weekForLogs,
+          logsByPropertyAndDate: partitioned.logsByPropertyAndDate,
+          logsByExplicitItemAndDate: partitioned.logsByExplicitItemAndDate,
+          legacyPropertyIds: routeSheetItemRowHasLiveInstance(routeSheetRow) ? [] : [pidStr],
+          explicitWorkloadTuples:
+            routeSheetItemRowHasLiveInstance(routeSheetRow) && routeSheetRow?.id
+              ? [{ propertyId: pidStr, routeSheetItemId: String(routeSheetRow.id) }]
+              : [],
+        });
+        const explicitId =
+          routeSheetItemRowHasLiveInstance(routeSheetRow) && routeSheetRow?.id
+            ? String(routeSheetRow.id).trim()
+            : "";
         const picked = pickTechnicianRouteDetailServiceLog({
           technicianSlug,
-          propertyId: String(dbProp.id),
+          propertyId: pidStr,
           weekStartDate: weekForLogs,
           routeType: /** @type {'turnover'|'midweek'} */ (selectedRouteType),
-          logsByPropertyAndDate: ctx.logsByPropertyAndDate,
+          logsByPropertyAndDate: partitioned.logsByPropertyAndDate,
+          logsByExplicitItemAndDate: partitioned.logsByExplicitItemAndDate,
+          explicitRouteSheetItemId: explicitId,
         });
         if (!cancelled) {
           setRouteScopedLogRow(picked);
@@ -311,6 +339,13 @@ export default function StephenPropertyDetailPage() {
     return effectiveServiceLogRow;
   }, [effectiveServiceLogRow, routeScopedServiceDateYmd]);
 
+  /** Phase 3: same `route_sheet_items.id` as gated `routeSheetRow`; omit when unavailable. */
+  const routeSheetItemIdDualWrite = useMemo(() => {
+    if (!needsRouteSheetGate || !routeSheetRow?.id) return undefined;
+    const s = String(routeSheetRow.id).trim();
+    return s || undefined;
+  }, [needsRouteSheetGate, routeSheetRow?.id]);
+
   const combinedLogsReady =
     serviceLogsReady && (!needsRouteSheetGate || routeScopedLogReady);
 
@@ -389,12 +424,14 @@ export default function StephenPropertyDetailPage() {
       const base = baselineWorkPatchRef.current ?? emptyServiceLogWorkPatch();
       const full = mapWorkStateToServiceLogPatch(state);
       const patch = diffServiceLogPatch(base, full);
+      const rsid = routeSheetItemIdDualWrite;
       if (Object.keys(patch).length > 0) {
         const r = await patchServiceLog(
           technicianSlug,
           propertyId,
           patch,
-          patchServiceDate
+          patchServiceDate,
+          rsid
         );
         if (r?.ok) {
           baselineWorkPatchRef.current = { ...base, ...patch };
@@ -413,6 +450,7 @@ export default function StephenPropertyDetailPage() {
           propertyName: prop.name,
           type: "pool_reading_updated",
           label: "Updated pool readings",
+          ...(rsid ? { route_sheet_item_id: rsid } : {}),
         });
       }
 
@@ -425,6 +463,7 @@ export default function StephenPropertyDetailPage() {
           propertyName: prop.name,
           type: "spa_reading_updated",
           label: "Updated spa readings",
+          ...(rsid ? { route_sheet_item_id: rsid } : {}),
         });
       }
 
@@ -440,6 +479,7 @@ export default function StephenPropertyDetailPage() {
           propertyName: prop.name,
           type: "pool_chemical_updated",
           label: "Adjusted pool chemicals",
+          ...(rsid ? { route_sheet_item_id: rsid } : {}),
         });
       }
 
@@ -452,10 +492,11 @@ export default function StephenPropertyDetailPage() {
           propertyName: prop.name,
           type: "spa_chemical_updated",
           label: "Adjusted spa chemicals",
+          ...(rsid ? { route_sheet_item_id: rsid } : {}),
         });
       }
     },
-    [property, technicianSlug, needsRouteSheetGate, routeScopedServiceDateYmd]
+    [property, technicianSlug, needsRouteSheetGate, routeScopedServiceDateYmd, routeSheetItemIdDualWrite]
   );
 
   if (!technician) {
@@ -534,6 +575,7 @@ export default function StephenPropertyDetailPage() {
               serviceLogRowForHoses={
                 needsRouteSheetGate ? effectiveServiceLogRowForWrites : undefined
               }
+              routeSheetItemId={needsRouteSheetGate ? routeSheetItemIdDualWrite : undefined}
               spaFillMinutes={dbProp?.spa_fill_minutes}
               onPropertySpaFillUpdated={(row) => {
                 setDbProp((prev) => (prev && row ? { ...prev, ...row } : prev));
@@ -546,6 +588,7 @@ export default function StephenPropertyDetailPage() {
               propertyName={property.name}
               technicianSlug={technicianSlug}
               serviceLogRow={effectiveServiceLogRowForWrites}
+              routeSheetItemId={needsRouteSheetGate ? routeSheetItemIdDualWrite : undefined}
             />
             <ReadingsForm
               key={`${slugForUi}:${effectiveServiceLogRowForWrites?.id ?? "none"}:${String(effectiveServiceLogRowForWrites?.service_date ?? routeScopedServiceDateYmd ?? "")}`}

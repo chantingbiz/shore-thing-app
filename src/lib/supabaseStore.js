@@ -219,10 +219,14 @@ export function getRouteSettingsRow(propertyId) {
 
 /**
  * @param {string} [serviceDateYmdOpt] Eastern `YYYY-MM-DD` row to patch; omit for Eastern today-only cache UX
+ * @param {string} [routeSheetItemIdOpt] Phase 3: dual-write `service_logs.route_sheet_item_id`
  */
-export async function patchServiceLog(techSlug, propertyId, patch, serviceDateYmdOpt) {
+export async function patchServiceLog(techSlug, propertyId, patch, serviceDateYmdOpt, routeSheetItemIdOpt) {
   const idKey = serviceLogPropertyIdKey(propertyId);
   if (!techSlug || !idKey) return { ok: false };
+
+  const rsid = String(routeSheetItemIdOpt ?? "").trim();
+  const outbound = rsid ? { ...patch, route_sheet_item_id: rsid } : patch;
 
   const todayY = getTodayEasternDate();
   const targetDay = String(serviceDateYmdOpt ?? "").trim() || todayY;
@@ -234,7 +238,7 @@ export async function patchServiceLog(techSlug, propertyId, patch, serviceDateYm
     usesTodayStore && cachedRow != null && typeof cachedRow === "object"
       ? cachedRow
       : { property_id: idKey, technician_slug: techSlug };
-  const next = { ...prev, ...patch, service_date: targetDay };
+  const next = { ...prev, ...outbound, service_date: targetDay };
 
   const block = serviceLogsByTech.get(techSlug) ?? {
     loadedAt: 0,
@@ -247,7 +251,7 @@ export async function patchServiceLog(techSlug, propertyId, patch, serviceDateYm
   emitter.emit();
 
   try {
-    const saved = await upsertServiceLog(idKey, techSlug, patch, targetDay);
+    const saved = await upsertServiceLog(idKey, techSlug, outbound, targetDay);
     if (usesTodayStore) {
       block.rowsByPropertyId.set(idKey, saved ?? next);
       serviceLogsByTech.set(techSlug, block);
@@ -260,10 +264,25 @@ export async function patchServiceLog(techSlug, propertyId, patch, serviceDateYm
   }
 }
 
-export async function insertActivity(techSlug, propertyId, eventType, eventLabel) {
+/**
+ * @param {string} [routeSheetItemIdOptional] Phase 3: dual-write `activity_logs.route_sheet_item_id`
+ */
+export async function insertActivity(
+  techSlug,
+  propertyId,
+  eventType,
+  eventLabel,
+  routeSheetItemIdOptional
+) {
   if (!techSlug || !propertyId || !eventType) return;
   try {
-    await logActivity(techSlug, propertyId, eventType, eventLabel ?? eventType);
+    await logActivity(
+      techSlug,
+      propertyId,
+      eventType,
+      eventLabel ?? eventType,
+      routeSheetItemIdOptional
+    );
   } catch (error) {
     console.error("Supabase write failed", error);
   }

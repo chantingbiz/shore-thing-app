@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import SubpageTemplate from "../SubpageTemplate.jsx";
 import {
   archiveCompletedServiceLogs,
+  ensureRouteSheetInstanceForSend,
   getPropertiesForTechnician,
   getRouteSettings,
   getRouteSheetItemsForWeek,
@@ -585,7 +586,17 @@ export default function RouteSheetDashboardPage() {
         route_type: typeKey,
         assigned_technician_slug: slugLower,
       });
-      const saved = await upsertRouteSheetItemsBatch(rows);
+      const routeSheetInstanceId = await ensureRouteSheetInstanceForSend({
+        weekStartDateSaturdayYmd: weekStartDate,
+        routeType: typeKey,
+        technicianSlug: slugLower,
+        sentAt,
+      });
+      const rowsWithInstance = rows.map((r) => ({
+        ...r,
+        route_sheet_instance_id: routeSheetInstanceId,
+      }));
+      const saved = await upsertRouteSheetItemsBatch(rowsWithInstance);
       console.log("[route sheet dashboard] send result", {
         requested: rows.length,
         returned_rows: saved?.length ?? 0,

@@ -8,8 +8,11 @@ import {
 import { getTodayEasternDate } from "../lib/easternDate.js";
 import {
   fetchRouteInstanceContext,
+  fetchStephenPartitionedRouteInstanceContext,
   getRouteInstanceStatus,
+  mergeRealtimeStephenPartitioned,
   mergeRealtimeTodayServiceLogsIntoIndex,
+  routeSheetItemRowHasLiveInstance,
   serviceLogRowHasChemReadingsEntered,
   technicianRouteSheetCalendarDateSet,
 } from "./routeInstanceStatus.js";
@@ -83,19 +86,57 @@ export async function fetchRouteSheetSentGuestCheckSummary(
   await ensurePropertiesById(propertyIds);
   await ensureServiceLogsForToday(slug);
 
-  const { logsByPropertyAndDate, activityDatesByProperty } = await fetchRouteInstanceContext(
-    slug,
-    weekStartDate,
-    routeType,
-    propertyIds
-  );
-  mergeRealtimeTodayServiceLogsIntoIndex(
-    slug,
-    logsByPropertyAndDate,
-    propertyIds,
-    getTodayEasternDate(),
-    technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate)
-  );
+  /** Phase 4 Stephen: rows with `route_sheet_instance_id` use `service_logs.route_sheet_item_id` only for counts. */
+  let logsByPropertyAndDate;
+  let activityDatesByProperty;
+  /** @type {Map<string, Map<string, Record<string, unknown>>> | undefined} */
+  let logsByExplicitItemAndDate;
+  /** @type {Map<string, Set<string>> | undefined} */
+  let activityDatesByRouteSheetItemId;
+
+  if (slug === "stephen") {
+    const partitioned = await fetchStephenPartitionedRouteInstanceContext(
+      slug,
+      weekStartDate,
+      routeType,
+      workloadRows
+    );
+    logsByPropertyAndDate = partitioned.logsByPropertyAndDate;
+    activityDatesByProperty = partitioned.activityDatesByProperty;
+    logsByExplicitItemAndDate = partitioned.logsByExplicitItemAndDate;
+    activityDatesByRouteSheetItemId = partitioned.activityDatesByRouteSheetItemId;
+
+    const legacyPropertyIds = [
+      ...new Set(
+        workloadRows.filter((r) => !routeSheetItemRowHasLiveInstance(r)).map((r) => String(r.property_id ?? "").trim())
+      ),
+    ].filter(Boolean);
+    const explicitWorkloadTuples = workloadRows.filter(routeSheetItemRowHasLiveInstance).map((r) => ({
+      propertyId: String(r.property_id ?? "").trim(),
+      routeSheetItemId: String(r.id ?? "").trim(),
+    }));
+
+    mergeRealtimeStephenPartitioned({
+      technicianSlug: slug,
+      routeType,
+      weekStartSaturdayYmd: weekStartDate,
+      logsByPropertyAndDate,
+      logsByExplicitItemAndDate,
+      legacyPropertyIds,
+      explicitWorkloadTuples,
+    });
+  } else {
+    const ctx = await fetchRouteInstanceContext(slug, weekStartDate, routeType, propertyIds);
+    logsByPropertyAndDate = ctx.logsByPropertyAndDate;
+    activityDatesByProperty = ctx.activityDatesByProperty;
+    mergeRealtimeTodayServiceLogsIntoIndex(
+      slug,
+      logsByPropertyAndDate,
+      propertyIds,
+      getTodayEasternDate(),
+      technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate)
+    );
+  }
 
   let guestTotal = 0;
   let guestCompleted = 0;
@@ -110,6 +151,9 @@ export async function fetchRouteSheetSentGuestCheckSummary(
     else checkTotal += 1;
 
     const pid = String(row.property_id ?? "").trim();
+    const explicitItemId =
+      slug === "stephen" && routeSheetItemRowHasLiveInstance(row) ? String(row.id ?? "").trim() : "";
+
     const st = getRouteInstanceStatus({
       propertyId: pid,
       weekStartDate,
@@ -117,6 +161,9 @@ export async function fetchRouteSheetSentGuestCheckSummary(
       logsByPropertyAndDate,
       activityDatesByProperty,
       technicianSlug: slug,
+      logsByExplicitItemAndDate,
+      activityDatesByRouteSheetItemId,
+      explicitRouteSheetItemId: explicitItemId,
     });
     const wip = !st.isCompleted && (st.isLive || st.isInProgress);
     if (isGuest) {

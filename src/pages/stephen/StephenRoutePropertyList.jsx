@@ -26,13 +26,12 @@ import { logTechnicianActivity } from "../../utils/activityLog.js";
 import { setPropertyCompletedForDay } from "../../utils/propertyCompletion.js";
 import {
   ROUTE_CARD_BADGE_LIVE,
-  fetchRouteInstanceContext,
+  fetchStephenPartitionedRouteInstanceContext,
   getRouteCardBadgeLabel,
   getRouteInstanceStatus,
-  mergeRealtimeTodayServiceLogsIntoIndex,
+  mergeRealtimeStephenPartitioned,
   pickTechnicianRouteDetailServiceLog,
   routeListSortTier,
-  technicianRouteSheetCalendarDateSet,
 } from "../../utils/routeInstanceStatus.js";
 import { technicianPropertyDetailPath } from "../../utils/technicianRoutePaths.js";
 import RouteParamBadges from "../../components/RouteParamBadges.jsx";
@@ -50,6 +49,9 @@ const TECH_SLUG = "stephen";
  *   name: string,
  *   address: string,
  *   id: string,
+ *   routeSheetItemId: string | undefined,
+ *   routeSheetInstanceId: string | null,
+ *   hasRouteSheetLiveInstance: boolean,
  *   sheetOrder: number,
  *   isGuest: boolean,
  *   spaFillMinutes: number | null,
@@ -116,11 +118,22 @@ export default function StephenRoutePropertyList({ routeType }) {
         const isGuest = item.guest_check === "guest";
         const guestCheck = isGuest ? "guest" : "check";
         const adminNote = String(item.comments ?? "").trim();
+        const sheetItemUuid = String(item.id ?? "").trim();
+        const instRaw = item.route_sheet_instance_id;
+        const routeSheetInstanceId =
+          instRaw != null && String(instRaw).trim() !== ""
+            ? String(instRaw).trim()
+            : null;
+        const hasRouteSheetLiveInstance = routeSheetInstanceId != null && routeSheetInstanceId !== "";
+
         out.push({
           slug,
           name: String(p?.name ?? item.property_name ?? slug),
           address: String(p?.address ?? ""),
           id: pid,
+          routeSheetItemId: sheetItemUuid || undefined,
+          routeSheetInstanceId,
+          hasRouteSheetLiveInstance,
           sheetOrder,
           isGuest,
           spaFillMinutes:
@@ -194,33 +207,60 @@ export default function StephenRoutePropertyList({ routeType }) {
     let cancelled = false;
     const sheetWeek =
       String(routeList[0]?.weekStartDate ?? "").trim() || getActiveRouteSheetSaturdayEastern();
-    const ids = routeList.map((p) => String(p.id ?? "").trim()).filter(Boolean);
     void (async () => {
       try {
-        const { logsByPropertyAndDate, activityDatesByProperty } = await fetchRouteInstanceContext(
+        const workloadRows = routeList.map((p) => ({
+          property_id: String(p.id ?? "").trim(),
+          id: String(p.routeSheetItemId ?? "").trim(),
+          route_sheet_instance_id: p.hasRouteSheetLiveInstance ? (p.routeSheetInstanceId ?? null) : null,
+        }));
+
+        const partitioned = await fetchStephenPartitionedRouteInstanceContext(
           TECH_SLUG,
           sheetWeek,
           routeType,
-          ids
+          workloadRows
         );
-        mergeRealtimeTodayServiceLogsIntoIndex(
-          TECH_SLUG,
-          logsByPropertyAndDate,
-          ids,
-          getTodayEasternDate(),
-          technicianRouteSheetCalendarDateSet(TECH_SLUG, routeType, sheetWeek)
-        );
+
+        const legacyPropertyIds = [
+          ...new Set(routeList.filter((p) => !p.hasRouteSheetLiveInstance).map((p) => String(p.id ?? "").trim())),
+        ].filter(Boolean);
+        const explicitWorkloadTuples = routeList
+          .filter((p) => p.hasRouteSheetLiveInstance && p.routeSheetItemId)
+          .map((p) => ({
+            propertyId: String(p.id ?? "").trim(),
+            routeSheetItemId: String(p.routeSheetItemId),
+          }));
+
+        mergeRealtimeStephenPartitioned({
+          technicianSlug: TECH_SLUG,
+          routeType,
+          weekStartSaturdayYmd: sheetWeek,
+          logsByPropertyAndDate: partitioned.logsByPropertyAndDate,
+          logsByExplicitItemAndDate: partitioned.logsByExplicitItemAndDate,
+          legacyPropertyIds,
+          explicitWorkloadTuples,
+        });
+
+        const { logsByPropertyAndDate, activityDatesByProperty, logsByExplicitItemAndDate, activityDatesByRouteSheetItemId } =
+          partitioned;
+
         if (cancelled) return;
         const todayY = getTodayEasternDate();
         /** @type {Record<string, { isCompleted: boolean, isLive: boolean, isInProgress: boolean, allowFinishJob: boolean, effectiveServiceDate: string | null }>} */
         const next = {};
         for (const p of routeList) {
+          const explicitId =
+            p.hasRouteSheetLiveInstance && p.routeSheetItemId ? String(p.routeSheetItemId).trim() : "";
+
           const picked = pickTechnicianRouteDetailServiceLog({
             technicianSlug: TECH_SLUG,
             propertyId: String(p.id ?? "").trim(),
             weekStartDate: sheetWeek,
             routeType,
             logsByPropertyAndDate,
+            logsByExplicitItemAndDate,
+            explicitRouteSheetItemId: explicitId,
           });
           const eff =
             picked?.service_date != null ? String(picked.service_date).trim() : "";
@@ -231,6 +271,9 @@ export default function StephenRoutePropertyList({ routeType }) {
               routeType,
               logsByPropertyAndDate,
               activityDatesByProperty,
+              logsByExplicitItemAndDate,
+              activityDatesByRouteSheetItemId,
+              explicitRouteSheetItemId: explicitId,
               todayRowOverride: null,
               todayEasternYmd: todayY,
               technicianSlug: TECH_SLUG,
@@ -293,8 +336,10 @@ export default function StephenRoutePropertyList({ routeType }) {
     const st = instanceBySlug[p.slug];
     const next = !(st?.isCompleted ?? false);
     const svc = st?.effectiveServiceDate ?? undefined;
+    const rsid = p.routeSheetItemId;
     await setPropertyCompletedForDay(TECH_SLUG, p.slug, next, undefined, {
       serviceDateYmd: svc || undefined,
+      ...(rsid ? { route_sheet_item_id: rsid } : {}),
     });
     if (next) {
       logTechnicianActivity(TECH_SLUG, {
@@ -302,6 +347,7 @@ export default function StephenRoutePropertyList({ routeType }) {
         propertyName: p.name,
         type: "property_completed",
         label: "Completed property",
+        ...(rsid ? { route_sheet_item_id: rsid } : {}),
       });
     }
     setRefreshTick((n) => n + 1);

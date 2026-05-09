@@ -3,6 +3,10 @@ import {
   getEasternDayActivityBoundsUtc,
   getTodayEasternDate,
 } from "./easternDate.js";
+import {
+  getRouteSheetWeekLabel,
+  serviceDatesForRouteTypeInSheetWeek,
+} from "./routeSheetWeek.js";
 
 export { getTodayEasternDate } from "./easternDate.js";
 
@@ -10,7 +14,7 @@ export { getTodayEasternDate } from "./easternDate.js";
 export const SERVICE_PHOTOS_BUCKET = "pool-photos";
 
 const SERVICE_LOG_SELECT_BASE =
-  "id,property_id,technician_slug,service_date,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,pool_clarifier,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
+  "id,property_id,technician_slug,service_date,route_sheet_item_id,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,pool_clarifier,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
 
 /** `service_logs` columns for Chemicals Added (not TA readings before/after). */
 export const SERVICE_LOG_CHEMICAL_COLUMNS = [
@@ -314,6 +318,24 @@ export async function getServiceLogsForTechnicianPropertiesDateRange(
 }
 
 /**
+ * Phase 4 Stephen: logs explicitly tied to `route_sheet_items` rows (dual-written `route_sheet_item_id`).
+ * @param {string} techSlug
+ * @param {string[]} routeSheetItemIds UUIDs of `route_sheet_items.id`
+ */
+export async function getServiceLogsForTechnicianRouteSheetItemIds(techSlug, routeSheetItemIds) {
+  const slug = String(techSlug ?? "").toLowerCase().trim();
+  const ids = [...new Set((routeSheetItemIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
+  if (!slug || !ids.length) return [];
+  const { data, error } = await supabase
+    .from("service_logs")
+    .select(SERVICE_LOG_SELECT_BASE)
+    .eq("technician_slug", slug)
+    .in("route_sheet_item_id", ids);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
  * Activity rows for a technician in a UTC half-open interval (caller supplies bounds, e.g. from
  * {@link getEasternDayActivityBoundsUtc} spanning multiple Eastern days).
  *
@@ -326,7 +348,7 @@ export async function getActivityLogsForTechnicianUtcRange(techSlug, startIso, e
   if (!slug || !startIso || !endExclusiveIso) return [];
   const { data, error } = await supabase
     .from("activity_logs")
-    .select("technician_slug,property_id,event_type,event_label,created_at")
+    .select("technician_slug,property_id,event_type,event_label,created_at,route_sheet_item_id")
     .eq("technician_slug", slug)
     .gte("created_at", startIso)
     .lt("created_at", endExclusiveIso)
@@ -429,19 +451,33 @@ export async function getCompletedServiceLogsForTechnicianDateRange(techSlug, mi
   return data ?? [];
 }
 
-export async function logActivity(techSlug, propertyId, eventType, eventLabel) {
+/**
+ * @param {string} [routeSheetItemIdOptional] `route_sheet_items.id` — Phase 3 dual-write when set.
+ */
+export async function logActivity(
+  techSlug,
+  propertyId,
+  eventType,
+  eventLabel,
+  routeSheetItemIdOptional
+) {
+  const rid = String(routeSheetItemIdOptional ?? "").trim();
   console.log("Supabase write about to run", {
     property_id: propertyId,
     event_type: eventType,
     event_label: eventLabel,
+    ...(rid ? { route_sheet_item_id: rid } : {}),
   });
-  const { data, error } = await supabase.from("activity_logs").insert({
+  /** @type {Record<string, unknown>} */
+  const row = {
     technician_slug: techSlug,
     property_id: propertyId,
     event_type: eventType,
     event_label: eventLabel,
     created_at: new Date().toISOString(),
-  });
+  };
+  if (rid) row.route_sheet_item_id = rid;
+  const { data, error } = await supabase.from("activity_logs").insert(row);
   if (error) {
     console.error("Supabase write failed", error);
     throw error;
@@ -527,7 +563,7 @@ export async function getRouteSheetItemsForWeek(weekStartDate, routeType, techni
   const slug = String(technicianSlug ?? "").toLowerCase().trim();
   if (!w || !slug || (routeType !== "turnover" && routeType !== "midweek")) return [];
   const sel =
-    "id,week_start_date,route_type,property_id,property_name,technician_slug,source_technician_slug,assigned_technician_slug,guest_check,pool_heat,comments,included,sent_at,created_at";
+    "id,week_start_date,route_type,property_id,property_name,technician_slug,source_technician_slug,assigned_technician_slug,guest_check,pool_heat,comments,included,sent_at,created_at,route_sheet_instance_id";
   const base = () =>
     supabase.from("route_sheet_items").select(sel).eq("week_start_date", w).eq("route_type", routeType);
   const { data: byAssigned, error: errA } = await base().eq("assigned_technician_slug", slug);
@@ -575,6 +611,89 @@ export async function getRouteSheetWeekSentSnapshot(weekStartDate) {
 /** Matches `public.route_sheet_items` unique constraint (PostgREST `onConflict`). */
 export const ROUTE_SHEET_ITEMS_ON_CONFLICT =
   "week_start_date,route_type,property_id,assigned_technician_slug";
+
+/**
+ * Phase 2: create or refresh `route_sheet_instances` for admin send (dual-write).
+ * Reuses one row per (technician, route_type, service window) so re-sends update the same instance.
+ *
+ * @param {{
+ *   weekStartDateSaturdayYmd: string,
+ *   routeType: 'turnover'|'midweek',
+ *   technicianSlug: string,
+ *   sentAt: string,
+ * }} args
+ * @returns {Promise<string>} route_sheet_instances.id (uuid)
+ */
+export async function ensureRouteSheetInstanceForSend({
+  weekStartDateSaturdayYmd,
+  routeType,
+  technicianSlug,
+  sentAt,
+}) {
+  const week = String(weekStartDateSaturdayYmd ?? "").trim();
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  const rt = routeType;
+  if (!week || !slug || (rt !== "turnover" && rt !== "midweek")) {
+    throw new Error(
+      "ensureRouteSheetInstanceForSend: invalid week_start_date, technician_slug, or route_type"
+    );
+  }
+  const dates = serviceDatesForRouteTypeInSheetWeek(week, rt);
+  if (!dates.length) {
+    throw new Error("ensureRouteSheetInstanceForSend: could not derive service window");
+  }
+  const sorted = [...dates].sort();
+  const service_window_start = sorted[0];
+  const service_window_end = sorted[sorted.length - 1];
+  const typeLabel = rt === "turnover" ? "Turnover" : "Midweek";
+  const sheet_name = `${getRouteSheetWeekLabel(week)} — ${typeLabel}`;
+
+  const { data: existing, error: selErr } = await supabase
+    .from("route_sheet_instances")
+    .select("id")
+    .eq("technician_slug", slug)
+    .eq("route_type", rt)
+    .eq("service_window_start", service_window_start)
+    .eq("service_window_end", service_window_end)
+    .maybeSingle();
+
+  if (selErr) throw selErr;
+
+  if (existing?.id) {
+    const { data: updated, error: upErr } = await supabase
+      .from("route_sheet_instances")
+      .update({
+        sheet_name,
+        status: "active",
+        sent_at: sentAt,
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .maybeSingle();
+    if (upErr) throw upErr;
+    return String(updated?.id ?? existing.id);
+  }
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("route_sheet_instances")
+    .insert({
+      technician_slug: slug,
+      route_type: rt,
+      sheet_name,
+      service_window_start,
+      service_window_end,
+      status: "active",
+      sent_at: sentAt,
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (insErr) throw insErr;
+  if (!inserted?.id) {
+    throw new Error("ensureRouteSheetInstanceForSend: insert did not return id");
+  }
+  return String(inserted.id);
+}
 
 /**
  * Upsert weekly sheet rows. Does not touch `route_settings`.

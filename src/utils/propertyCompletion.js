@@ -30,7 +30,7 @@ function completionPropertySlug(techSlug, propertySlug) {
  * @param {string} propertySlug
  * @param {boolean} completed
  * @param {string} [dayKey]
- * @param {{ serviceDateYmd?: string }} [opts] Eastern `YYYY-MM-DD` row to patch (route-sheet early work).
+ * @param {{ serviceDateYmd?: string, route_sheet_item_id?: string }} [opts] Eastern `YYYY-MM-DD` row to patch (route-sheet early work); Phase 3 dual-write id.
  */
 export async function setPropertyCompletedForDay(
   techSlug,
@@ -46,11 +46,13 @@ export async function setPropertyCompletedForDay(
   primePropertiesBySlug([slug]);
   const resolved = resolveDbPropertyId(slug);
   const serviceDate = String(opts.serviceDateYmd ?? "").trim() || getTodayEasternDate();
+  const rsid = String(opts.route_sheet_item_id ?? "").trim();
   console.log("Supabase write preflight", {
     property_slug: slug,
     property_id: resolved,
     service_date: serviceDate,
     onConflict: "property_id,service_date",
+    ...(rsid ? { route_sheet_item_id: rsid } : {}),
   });
   if (!resolved) return;
   const nowIso = new Date().toISOString();
@@ -71,18 +73,18 @@ export async function setPropertyCompletedForDay(
       const rowOne = rows[0];
       if (rowOne?.pool_hose_started_at != null) {
         patch.pool_hose_started_at = null;
-        void insertActivity(techSlug, resolved, "pool_hose_stopped", "Removed pool hose");
+        void insertActivity(techSlug, resolved, "pool_hose_stopped", "Removed pool hose", rsid || undefined);
       }
       if (rowOne?.spa_hose_started_at != null) {
         patch.spa_hose_started_at = null;
-        void insertActivity(techSlug, resolved, "spa_hose_stopped", "Removed spa hose");
+        void insertActivity(techSlug, resolved, "spa_hose_stopped", "Removed spa hose", rsid || undefined);
       }
     } catch (e) {
       console.error("[setPropertyCompletedForDay] could not preload hose timestamps", e);
     }
   }
 
-  await patchServiceLog(techSlug, resolved, patch, serviceDate);
+  await patchServiceLog(techSlug, resolved, patch, serviceDate, rsid || undefined);
 }
 
 export function isPropertyCompletedToday(

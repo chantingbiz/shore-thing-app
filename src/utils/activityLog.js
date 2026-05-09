@@ -17,7 +17,7 @@ export const ACTIVITY_GROUP_WINDOW_MS = 90_000;
 
 /**
  * @param {string} techSlug
- * @param {{ propertySlug: string, propertyName: string, type: string, label?: string }} payload
+ * @param {{ propertySlug: string, propertyName: string, type: string, label?: string, route_sheet_item_id?: string }} payload
  */
 export function logTechnicianActivity(techSlug, payload) {
   if (!techSlug || !payload?.propertySlug) return;
@@ -25,13 +25,21 @@ export function logTechnicianActivity(techSlug, payload) {
   if (!slug) return;
   primePropertiesBySlug([slug]);
   const resolved = resolveDbPropertyId(slug);
+  const rsid = String(payload.route_sheet_item_id ?? "").trim();
   console.log("Supabase write preflight", {
     property_slug: slug,
     property_id: resolved,
     event_type: payload.type,
+    ...(rsid ? { route_sheet_item_id: rsid } : {}),
   });
   if (!resolved) return;
-  void insertActivity(techSlug, resolved, payload.type, payload.label || payload.type);
+  void insertActivity(
+    techSlug,
+    resolved,
+    payload.type,
+    payload.label || payload.type,
+    rsid || undefined
+  );
 }
 
 export function getTechnicianDayBlock(techSlug, dayKey = getLocalDayKey()) {

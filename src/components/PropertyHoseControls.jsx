@@ -33,6 +33,8 @@ export default function PropertyHoseControls({
   hoseServiceDateYmd = undefined,
   /** Hydrate hoses from routed `effectiveServiceLogRow` when `hoseServiceDateYmd` is set. */
   serviceLogRowForHoses = undefined,
+  /** Phase 3: dual-write `service_logs` / `activity_logs` `route_sheet_item_id` when on a sent sheet. */
+  routeSheetItemId = undefined,
   spaFillMinutes = undefined,
   /** Called after a successful save with the updated property row (or partial). */
   onPropertySpaFillUpdated = undefined,
@@ -97,11 +99,13 @@ export default function PropertyHoseControls({
 
   const logHose = (type, label) => {
     if (!enableActivityLog || !technicianSlug || !propertyName) return;
+    const rsid = String(routeSheetItemId ?? "").trim();
     logTechnicianActivity(technicianSlug, {
       propertySlug,
       propertyName,
       type,
       label,
+      ...(rsid ? { route_sheet_item_id: rsid } : {}),
     });
   };
 
@@ -114,13 +118,13 @@ export default function PropertyHoseControls({
   const togglePool = () => {
     if (poolActive) {
       logHose("pool_hose_stopped", "Removed pool hose");
-      clearPool(technicianSlug, propertySlug, hoseServiceDateYmd);
+      clearPool(technicianSlug, propertySlug, hoseServiceDateYmd, routeSheetItemId);
       poolStartRef.current = null;
       setPoolActive(false);
     } else {
       logHose("pool_hose_started", "Dropped pool hose");
       const ts = Date.now();
-      setPoolStart(technicianSlug, propertySlug, ts, hoseServiceDateYmd);
+      setPoolStart(technicianSlug, propertySlug, ts, hoseServiceDateYmd, routeSheetItemId);
       poolStartRef.current = ts;
       setPoolActive(true);
     }
@@ -131,13 +135,13 @@ export default function PropertyHoseControls({
   const toggleSpa = () => {
     if (spaActive) {
       logHose("spa_hose_stopped", "Removed spa hose");
-      clearSpa(technicianSlug, propertySlug, hoseServiceDateYmd);
+      clearSpa(technicianSlug, propertySlug, hoseServiceDateYmd, routeSheetItemId);
       spaStartRef.current = null;
       setSpaActive(false);
     } else {
       logHose("spa_hose_started", "Dropped spa hose");
       const ts = Date.now();
-      setSpaStart(technicianSlug, propertySlug, ts, hoseServiceDateYmd);
+      setSpaStart(technicianSlug, propertySlug, ts, hoseServiceDateYmd, routeSheetItemId);
       spaStartRef.current = ts;
       setSpaActive(true);
     }

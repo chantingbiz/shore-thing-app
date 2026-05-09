@@ -7,6 +7,7 @@ import {
 import {
   getActivityLogsForTechnicianUtcRange,
   getServiceLogsForTechnicianPropertiesDateRange,
+  getServiceLogsForTechnicianRouteSheetItemIds,
   mapWorkStateToServiceLogPatch,
   workStateFromServiceLogRow,
 } from "../lib/api.js";
@@ -134,6 +135,209 @@ export function indexActivityPropertyDates(events, allowedEasternYmd) {
 }
 
 /**
+ * @param {unknown} row Typically a `route_sheet_items` payload.
+ */
+export function routeSheetItemRowHasLiveInstance(row) {
+  const v = row?.route_sheet_instance_id;
+  return v != null && String(v).trim() !== "";
+}
+
+/**
+ * @param {unknown[]} rows Service log rows scoped by `route_sheet_item_id`.
+ * @returns {Map<string, Map<string, Record<string, unknown>>>}
+ */
+export function indexServiceLogsByRouteSheetItemIdAndDate(rows) {
+  /** @type {Map<string, Map<string, Record<string, unknown>>>} */
+  const out = new Map();
+  for (const r of rows ?? []) {
+    if (!r || typeof r !== "object") continue;
+    const iid = String(/** @type {Record<string, unknown>} */ (r).route_sheet_item_id ?? "").trim();
+    const sd = String(/** @type {Record<string, unknown>} */ (r).service_date ?? "").trim();
+    if (!iid || !sd) continue;
+    if (!out.has(iid)) out.set(iid, new Map());
+    out.get(iid).set(sd, /** @type {Record<string, unknown>} */ (r));
+  }
+  return out;
+}
+
+/**
+ * Phase 4 Stephen: activity only attributed when `route_sheet_item_id` matches the sheet-item row UUID.
+ *
+ * @param {unknown[]} events activity_logs rows
+ * @param {Set<string>} allowedEasternYmd
+ * @param {Set<string>} routeSheetItemIdSet
+ */
+export function indexActivityDatesByRouteSheetItem(events, allowedEasternYmd, routeSheetItemIdSet) {
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map();
+  if (!(routeSheetItemIdSet instanceof Set) || routeSheetItemIdSet.size === 0) return out;
+
+  for (const id of routeSheetItemIdSet) {
+    const k = String(id ?? "").trim();
+    if (k) out.set(k, new Set());
+  }
+
+  const allowed =
+    allowedEasternYmd instanceof Set ? allowedEasternYmd : new Set([...(allowedEasternYmd ?? [])]);
+
+  for (const e of events ?? []) {
+    if (!e || typeof e !== "object") continue;
+    const pid = String(/** @type {Record<string, unknown>} */ (e).route_sheet_item_id ?? "").trim();
+    if (!routeSheetItemIdSet.has(pid)) continue;
+    const t = Date.parse(String(/** @type {Record<string, unknown>} */ (e).created_at ?? ""));
+    if (!Number.isFinite(t)) continue;
+    const ymd = getEasternCalendarDateAtUtc(t);
+    if (!allowed.has(ymd)) continue;
+    const set = out.get(pid);
+    if (set) set.add(ymd);
+  }
+  return out;
+}
+
+function mergeRealtimeTodayExplicitRouteSheetItems(
+  technicianSlug,
+  logsByExplicitItemAndDate,
+  tuples,
+  todayYmd = getTodayEasternDate(),
+  sheetWeekDatesEastern = null
+) {
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  const day = String(todayYmd ?? "").trim();
+  if (!(logsByExplicitItemAndDate instanceof Map) || !slug || !day) return logsByExplicitItemAndDate;
+  if (sheetWeekDatesEastern instanceof Set && !sheetWeekDatesEastern.has(day)) return logsByExplicitItemAndDate;
+
+  for (const t of tuples ?? []) {
+    const pid = String(t?.propertyId ?? "").trim();
+    const itemId = String(t?.routeSheetItemId ?? "").trim();
+    if (!pid || !itemId) continue;
+
+    const live = getServiceLogRow(slug, pid);
+    if (!live) continue;
+    if (String(live.route_sheet_item_id ?? "").trim() !== itemId) continue;
+
+    if (!logsByExplicitItemAndDate.has(itemId)) logsByExplicitItemAndDate.set(itemId, new Map());
+    const byDay = logsByExplicitItemAndDate.get(itemId);
+    const persisted = /** @type {Record<string, unknown> | undefined} */ (byDay.get(day));
+    if (substantivePersistedWinsSameDayVsLiveCache(persisted, live)) {
+      byDay.set(day, persisted);
+    } else {
+      byDay.set(day, /** @type {Record<string, unknown>} */ (live));
+    }
+  }
+
+  return logsByExplicitItemAndDate;
+}
+
+/**
+ * Stephen Phase 4: merges client “today” stubs into legacy property maps plus explicit sheet-item maps.
+ *
+ * @param {{
+ *   technicianSlug: string,
+ *   routeType: 'turnover'|'midweek',
+ *   weekStartSaturdayYmd: string,
+ *   logsByPropertyAndDate: Map<string, Map<string, Record<string, unknown>>>,
+ *   logsByExplicitItemAndDate: Map<string, Map<string, Record<string, unknown>>>,
+ *   legacyPropertyIds: string[],
+ *   explicitWorkloadTuples: Array<{propertyId:string, routeSheetItemId:string}>,
+ *   todayYmd?: string,
+ * }} opts
+ */
+export function mergeRealtimeStephenPartitioned(opts) {
+  const {
+    technicianSlug,
+    routeType,
+    weekStartSaturdayYmd,
+    logsByPropertyAndDate,
+    logsByExplicitItemAndDate,
+    legacyPropertyIds,
+    explicitWorkloadTuples,
+    todayYmd = getTodayEasternDate(),
+  } = opts;
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  const calSet = technicianRouteSheetCalendarDateSet(slug, routeType, weekStartSaturdayYmd);
+  mergeRealtimeTodayServiceLogsIntoIndex(slug, logsByPropertyAndDate, legacyPropertyIds, todayYmd, calSet);
+  mergeRealtimeTodayExplicitRouteSheetItems(slug, logsByExplicitItemAndDate, explicitWorkloadTuples, todayYmd, calSet);
+  return { logsByPropertyAndDate, logsByExplicitItemAndDate };
+}
+
+/**
+ * Loads `service_logs` + `activity_logs` split by workload rows: legacy property/date window rows vs
+ * `route_sheet_item_id`-scoped logs for sent instances (Stephen Phase 4).
+ *
+ * Caller should pass workload rows `{ property_id, id, route_sheet_instance_id }` from `route_sheet_items`.
+ *
+ * @param {string} technicianSlug
+ * @param {string} weekStartSaturdayYmd
+ * @param {'turnover'|'midweek'} routeType
+ * @param {Array<Record<string, unknown>>} workloadRows
+ */
+export async function fetchStephenPartitionedRouteInstanceContext(
+  technicianSlug,
+  weekStartSaturdayYmd,
+  routeType,
+  workloadRows
+) {
+  const nominalDates = serviceDatesForRouteTypeInSheetWeek(weekStartSaturdayYmd, routeType);
+  const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  const spanDates = serviceLogFetchDatesForTechnicianRoute(slug, routeType, weekStartSaturdayYmd);
+  if (!spanDates.length) {
+    return {
+      serviceDates: nominalDates,
+      logsByPropertyAndDate: new Map(),
+      activityDatesByProperty: new Map(),
+      logsByExplicitItemAndDate: new Map(),
+      activityDatesByRouteSheetItemId: new Map(),
+    };
+  }
+
+  const legacyRows = (workloadRows ?? []).filter((r) => !routeSheetItemRowHasLiveInstance(r));
+  const explicitRows = (workloadRows ?? []).filter((r) => routeSheetItemRowHasLiveInstance(r));
+
+  const legacyPids = [
+    ...new Set(legacyRows.map((r) => String(r.property_id ?? "").trim()).filter(Boolean)),
+  ];
+  const explicitItemIds = [
+    ...new Set(explicitRows.map((r) => String(r.id ?? "").trim()).filter(Boolean)),
+  ];
+
+  const { min, max } = ymdMinMax(spanDates);
+  const allowed = new Set(spanDates);
+  const { startIso, endExclusiveIso } = easternYmdRangeToUtcHalfOpen(min, max);
+
+  const [legacyLogRows, explicitLogRows, activityRows] = await Promise.all([
+    legacyPids.length
+      ? getServiceLogsForTechnicianPropertiesDateRange(slug, legacyPids, min, max)
+      : Promise.resolve([]),
+    explicitItemIds.length ? getServiceLogsForTechnicianRouteSheetItemIds(slug, explicitItemIds) : Promise.resolve([]),
+    getActivityLogsForTechnicianUtcRange(slug, startIso, endExclusiveIso),
+  ]);
+
+  const logsByPropertyAndDate = indexServiceLogsByPropertyAndDate(legacyLogRows);
+  const fullAct = indexActivityPropertyDates(activityRows, allowed);
+  /** @type {Map<string, Set<string>>} */
+  const activityDatesByProperty = new Map();
+  for (const pid of legacyPids) {
+    activityDatesByProperty.set(pid, fullAct.get(pid) ?? new Set());
+  }
+
+  const explicitSheetItemIdSet = new Set(explicitItemIds);
+  const logsByExplicitItemAndDate = indexServiceLogsByRouteSheetItemIdAndDate(explicitLogRows);
+  const activityDatesByRouteSheetItemId = indexActivityDatesByRouteSheetItem(
+    activityRows,
+    allowed,
+    explicitSheetItemIdSet
+  );
+
+  return {
+    serviceDates: nominalDates,
+    logsByPropertyAndDate,
+    activityDatesByProperty,
+    logsByExplicitItemAndDate,
+    activityDatesByRouteSheetItemId,
+  };
+}
+
+/**
  * Readings / chemicals / photos on the row (does not treat running hoses as “meaningful work”
  * for IN PROGRESS — those surface as LIVE instead).
  *
@@ -218,6 +422,9 @@ function substantivePersistedWinsSameDayVsLiveCache(persisted, live) {
  * @param {Record<string, unknown> | null} [input.todayRowOverride] merged client row for “today” (hose timers)
  * @param {string} [input.todayEasternYmd] defaults to Eastern today
  * @param {string} [input.technicianSlug] when `stephen` + turnover, includes temporary carryover date 2026-05-01
+ * @param {Map<string, Map<string, Record<string, unknown>>>} [input.logsByExplicitItemAndDate]
+ * @param {Map<string, Set<string>>} [input.activityDatesByRouteSheetItemId]
+ * @param {string} [input.explicitRouteSheetItemId] when set + maps above, scoped status for that sheet-item row only
  * @returns {{ isCompleted: boolean, isLive: boolean, isInProgress: boolean, allowFinishJob: boolean }}
  */
 export function getRouteInstanceStatus({
@@ -229,8 +436,12 @@ export function getRouteInstanceStatus({
   todayRowOverride = null,
   todayEasternYmd = getTodayEasternDate(),
   technicianSlug = "",
+  logsByExplicitItemAndDate = null,
+  activityDatesByRouteSheetItemId = null,
+  explicitRouteSheetItemId = "",
 }) {
   const pid = String(propertyId ?? "").trim();
+  const explicitId = String(explicitRouteSheetItemId ?? "").trim();
   const nominalDates = serviceDatesForRouteTypeInSheetWeek(weekStartDate, routeType);
   const nominalDateSet = new Set(nominalDates);
   const calendarWeekDates = serviceLogFetchDatesForTechnicianRoute(
@@ -238,7 +449,19 @@ export function getRouteInstanceStatus({
     routeType,
     weekStartDate
   );
-  const byDate = logsByPropertyAndDate.get(pid) ?? new Map();
+
+  /** Keys exist only once logs arrive; absent key still means explicit-scoped empty week. */
+  const useExplicitMaps = Boolean(explicitId) && logsByExplicitItemAndDate instanceof Map;
+
+  /** @type {Map<string, Record<string, unknown>>} */
+  const byDate = useExplicitMaps
+    ? (logsByExplicitItemAndDate?.get(explicitId) ?? new Map())
+    : (logsByPropertyAndDate.get(pid) ?? new Map());
+
+  const actDatesExplicit =
+    activityDatesByRouteSheetItemId instanceof Map
+      ? (activityDatesByRouteSheetItemId.get(explicitId) ?? new Set())
+      : new Set();
 
   const today = String(todayEasternYmd ?? "").trim();
   const todayInNominalWindow = nominalDateSet.has(today);
@@ -256,8 +479,13 @@ export function getRouteInstanceStatus({
   /** Saved work on this sheet: `route_sheet_items.week_start_date` … +6 Eastern days only. */
   const rowForInstanceScan = (d) => rowForDay(d);
 
+  /** `route_sheet_item_id` logs aren’t constrained to nominal fetch dates (e.g. midweek Stephen). */
+  const completionAndWorkScanDates = useExplicitMaps
+    ? [...new Set([...calendarWeekDates, ...byDate.keys()])].sort()
+    : calendarWeekDates;
+
   let isCompleted = false;
-  for (const d of calendarWeekDates) {
+  for (const d of completionAndWorkScanDates) {
     const row = rowForInstanceScan(d);
     if (row?.completed) {
       isCompleted = true;
@@ -269,15 +497,22 @@ export function getRouteInstanceStatus({
   }
 
   /** LIVE only for active hose on **today’s** `service_logs` calendar row (plus nominal-window days). */
-  const canUseTodayRowForLive =
+  let canUseTodayRowForLive =
     todayInNominalWindow || !!(rawTodayRow && serviceLogRowHasActiveHose(rawTodayRow));
+
+  /** Explicit sheet-item scoped rows must tie LIVE to logs with matching `route_sheet_item_id` (today’s cache). */
+  if (useExplicitMaps && explicitId && rawTodayRow) {
+    const rid = String(rawTodayRow.route_sheet_item_id ?? "").trim();
+    if (rid && rid !== explicitId) canUseTodayRowForLive = false;
+  }
+
   const todayRowForLive = canUseTodayRowForLive ? rawTodayRow : null;
   const isLive = !!(todayRowForLive && serviceLogRowHasActiveHose(todayRowForLive));
 
   let allowFinishJob =
     todayInNominalWindow || rowIndicatesStartedWorkToday(rawTodayRow) || isCompleted;
   if (!allowFinishJob) {
-    for (const d of calendarWeekDates) {
+    for (const d of completionAndWorkScanDates) {
       if (rowIndicatesStartedWorkToday(rowForInstanceScan(d))) {
         allowFinishJob = true;
         break;
@@ -292,9 +527,9 @@ export function getRouteInstanceStatus({
     return { isCompleted: false, isLive: true, isInProgress: false, allowFinishJob };
   }
 
-  const actDates = activityDatesByProperty.get(pid) ?? new Set();
+  const actDates = useExplicitMaps ? actDatesExplicit : activityDatesByProperty.get(pid) ?? new Set();
   let hasMeaningful = false;
-  for (const d of calendarWeekDates) {
+  for (const d of completionAndWorkScanDates) {
     const row = rowForInstanceScan(d);
     if (serviceLogRowHasMeaningfulNonHoseWork(row)) {
       hasMeaningful = true;
@@ -433,27 +668,52 @@ export function pickTechnicianRouteDetailServiceLog({
   weekStartDate,
   routeType,
   logsByPropertyAndDate,
+  logsByExplicitItemAndDate = null,
+  explicitRouteSheetItemId = "",
 }) {
   const pid = String(propertyId ?? "").trim();
   const slug = String(technicianSlug ?? "").toLowerCase().trim();
+  const explicitId = String(explicitRouteSheetItemId ?? "").trim();
+  const useExplicit = Boolean(explicitId) && logsByExplicitItemAndDate instanceof Map;
+
   if (!pid || !slug) return null;
 
   const sheetDays = serviceLogFetchDatesForTechnicianRoute(slug, routeType, weekStartDate);
-  mergeRealtimeTodayServiceLogsIntoIndex(
-    slug,
-    logsByPropertyAndDate,
-    [pid],
-    getTodayEasternDate(),
-    technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate)
-  );
+  const calSet = technicianRouteSheetCalendarDateSet(slug, routeType, weekStartDate);
+
+  if (useExplicit) {
+    mergeRealtimeTodayExplicitRouteSheetItems(
+      slug,
+      logsByExplicitItemAndDate,
+      [{ propertyId: pid, routeSheetItemId: explicitId }],
+      getTodayEasternDate(),
+      calSet
+    );
+  } else {
+    mergeRealtimeTodayServiceLogsIntoIndex(slug, logsByPropertyAndDate, [pid], getTodayEasternDate(), calSet);
+  }
 
   const nominalDates = serviceDatesForRouteTypeInSheetWeek(weekStartDate, routeType);
   const spanDates = sheetDays;
-  const byDate = logsByPropertyAndDate.get(pid) ?? new Map();
+
+  /** @type {Map<string, Record<string, unknown>>} */
+  const byDate = useExplicit
+    ? logsByExplicitItemAndDate?.get(explicitId) ?? new Map()
+    : logsByPropertyAndDate.get(pid) ?? new Map();
+
   const today = getTodayEasternDate();
   const todayLive = getServiceLogRow(slug, pid);
 
   const mergedForDay = (d) => {
+    if (useExplicit && d === today && todayLive) {
+      const match = String(todayLive.route_sheet_item_id ?? "").trim() === explicitId;
+      const persistedToday = /** @type {Record<string, unknown> | null} */ (byDate.get(d) ?? null);
+      if (!match) return persistedToday;
+      if (substantivePersistedWinsSameDayVsLiveCache(persistedToday, todayLive ?? null)) {
+        return persistedToday;
+      }
+      return /** @type {Record<string, unknown> | null} */ (todayLive);
+    }
     if (d === today) {
       const persistedToday = /** @type {Record<string, unknown> | null} */ (
         byDate.get(d) ?? null
@@ -467,14 +727,17 @@ export function pickTechnicianRouteDetailServiceLog({
   };
 
   /** TEMP: Stephen Turnover — prefer 2026-05-01 row when present (field work vs Sat sheet anchor). */
+  /** Instance-scoped rows must not resurrect legacy inferred dates lacking `route_sheet_item_id`. */
   const urgentDay = String(URGENT_STEPHEN_TURNOVER_EXTRA_SERVICE_DATE).trim();
-  if (slug === "stephen" && routeType === "turnover" && urgentDay) {
+  if (!useExplicit && slug === "stephen" && routeType === "turnover" && urgentDay) {
     const r = /** @type {Record<string, unknown> | null} */ (mergedForDay(urgentDay));
     if (r && typeof r === "object") return r;
   }
 
   /** Scan nominal days first so display stays aligned with turnover/midweek when ties exist */
-  const scanDays = [...new Set([...nominalDates, ...spanDates])];
+  const scanDays = useExplicit
+    ? [...new Set([...nominalDates, ...spanDates, ...byDate.keys()])].sort()
+    : [...new Set([...nominalDates, ...spanDates])];
 
   for (const d of scanDays) {
     const row = mergedForDay(d);

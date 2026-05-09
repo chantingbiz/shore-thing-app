@@ -60,6 +60,8 @@ export default function ServicePhotoUploads({
   propertyName,
   technicianSlug,
   serviceLogRow,
+  /** Phase 3: dual-write when sheet-backed technician property detail. */
+  routeSheetItemId = undefined,
 }) {
   const inputRefs = useRef({});
   const [busySlot, setBusySlot] = useState(null);
@@ -112,13 +114,15 @@ export default function ServicePhotoUploads({
         });
         console.log("[service photo] saving URL to column", slotDef.column, publicUrl);
 
+        const rsid = String(routeSheetItemId ?? "").trim();
         const saved = await patchServiceLog(
           technicianSlug,
           propertyId,
           {
             [slotDef.column]: publicUrl,
           },
-          svcDate
+          svcDate,
+          rsid || undefined
         );
         console.log("[service photo] database update", saved);
 
@@ -131,6 +135,7 @@ export default function ServicePhotoUploads({
           propertyName,
           type: slotDef.eventType,
           label: slotDef.label,
+          ...(rsid ? { route_sheet_item_id: rsid } : {}),
         });
       } catch (e) {
         console.error("[service photo] upload or save failed", e);
@@ -141,7 +146,14 @@ export default function ServicePhotoUploads({
         if (ref) ref.value = "";
       }
     },
-    [propertySlug, propertyName, technicianSlug, serviceLogRow?.id, serviceLogRow?.service_date]
+    [
+      propertySlug,
+      propertyName,
+      technicianSlug,
+      serviceLogRow?.id,
+      serviceLogRow?.service_date,
+      routeSheetItemId,
+    ]
   );
 
   return (
