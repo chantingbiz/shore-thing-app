@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient.js";
+import { compressImageForUpload } from "../utils/compressImageForUpload.js";
 import {
   getEasternDayActivityBoundsUtc,
   getTodayEasternDate,
@@ -14,7 +15,7 @@ export { getTodayEasternDate } from "./easternDate.js";
 export const SERVICE_PHOTOS_BUCKET = "pool-photos";
 
 const SERVICE_LOG_SELECT_BASE =
-  "id,property_id,technician_slug,service_date,route_sheet_item_id,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,pool_clarifier,spa_mini_pucks,spa_granulated,spa_ta_added,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
+  "id,property_id,technician_slug,service_date,route_sheet_item_id,pool_hose_started_at,spa_hose_started_at,completed,completed_at,pool_tb_before,pool_tb_after,pool_fc_before,pool_fc_after,pool_ph_before,pool_ph_after,pool_ta_before,pool_ta_after,pool_temp_before,pool_temp_set,pool_temp_after,spa_tb_before,spa_tb_after,spa_fc_before,spa_fc_after,spa_ph_before,spa_ph_after,spa_ta_before,spa_ta_after,spa_temp_before,spa_temp,spa_temp_after,pool_pucks,pool_granulated,pool_ta_added,pool_clarifier,spa_mini_pucks,spa_granulated,spa_ta_added,spa_dump,pool_before_photo_url,pool_after_photo_url,spa_before_photo_url,spa_after_photo_url";
 
 /** `service_logs` columns for Chemicals Added (not TA readings before/after). */
 export const SERVICE_LOG_CHEMICAL_COLUMNS = [
@@ -96,6 +97,7 @@ export function mapWorkStateToServiceLogPatch(state) {
   return {
     ...mapReadingsWorkStateToServiceLogPatch(state),
     ...mapChemicalWorkStateToServiceLogPatch(state),
+    spa_dump: state?.spaDump === "yes" ? "yes" : "no",
   };
 }
 
@@ -119,6 +121,7 @@ export function emptyNestedWorkStateForServiceLog() {
     },
     poolChem: { pucks: "", granulated: "", ta: "", clarifier: "" },
     spaChem: { pucks: "", granulated: "", ta: "" },
+    spaDump: "no",
   };
 }
 
@@ -196,6 +199,7 @@ export function workStateFromServiceLogRow(row) {
       granulated: str(row.spa_granulated),
       ta: str(row.spa_ta_added),
     },
+    spaDump: str(row.spa_dump).toLowerCase() === "yes" ? "yes" : "no",
   };
 }
 
@@ -859,9 +863,12 @@ export async function uploadServicePhoto(file, { propertyId, slot, serviceLogId 
     type: file?.type,
     size: file?.size,
   });
+
+  const compressedFile = await compressImageForUpload(file);
+
   console.log("[service photo] bucket", SERVICE_PHOTOS_BUCKET);
 
-  const ext = extFromFile(file);
+  const ext = extFromFile(compressedFile);
   const ts = Date.now();
   const logFolder =
     serviceLogId && String(serviceLogId).trim() ? String(serviceLogId).trim() : "new";
@@ -869,8 +876,8 @@ export async function uploadServicePhoto(file, { propertyId, slot, serviceLogId 
   console.log("[service photo] filePath", filePath);
 
   const contentType =
-    file.type && String(file.type).trim()
-      ? file.type
+    compressedFile.type && String(compressedFile.type).trim()
+      ? compressedFile.type
       : ext === "png"
         ? "image/png"
         : ext === "webp"
@@ -879,7 +886,7 @@ export async function uploadServicePhoto(file, { propertyId, slot, serviceLogId 
             ? "image/gif"
             : "image/jpeg";
 
-  const { data: uploadData, error } = await supabase.storage.from("pool-photos").upload(filePath, file, {
+  const { data: uploadData, error } = await supabase.storage.from("pool-photos").upload(filePath, compressedFile, {
     cacheControl: "3600",
     upsert: false,
     contentType,

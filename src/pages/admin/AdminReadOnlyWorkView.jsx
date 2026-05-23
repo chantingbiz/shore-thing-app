@@ -219,6 +219,12 @@ export default function AdminReadOnlyWorkView({
             </span>
           </div>
         ))}
+        {String(serviceLog?.spa_dump ?? "").toLowerCase() === "yes" ? (
+          <div className={styles.chemRow}>
+            <span className={styles.rowLab}>Dump</span>
+            <span className={styles.chemVal}>Yes</span>
+          </div>
+        ) : null}
       </section>
 
       <p className={styles.saved}>

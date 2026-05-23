@@ -23,6 +23,10 @@ const emptyPoolChem = () => ({
 /** Default amount when pool clarifier is added — ounces in `service_logs.pool_clarifier`. */
 const POOL_CLARIFIER_DEFAULT = "5";
 
+/** Spa dump preset: granulated scoops / TA scoops in `service_logs`. */
+const SPA_DUMP_GRANULATED = "1";
+const SPA_DUMP_TA = "2";
+
 /** TB / FC / pH / TA only — Temp is never autofilled. */
 const NORMAL_READING_KEYS = ["tb", "fc", "ph", "ta"];
 const NORMAL_READING_VALUES = {
@@ -306,11 +310,12 @@ export default function ReadingsForm({
   }));
   const [poolChem, setPoolChem] = useState(emptyPoolChem);
   const [spaChem, setSpaChem] = useState(emptyChem);
+  const [spaDump, setSpaDump] = useState("no");
 
-  const stateRef = useRef({ pool, spa, poolChem, spaChem });
+  const stateRef = useRef({ pool, spa, poolChem, spaChem, spaDump });
   useEffect(() => {
-    stateRef.current = { pool, spa, poolChem, spaChem };
-  }, [pool, spa, poolChem, spaChem]);
+    stateRef.current = { pool, spa, poolChem, spaChem, spaDump };
+  }, [pool, spa, poolChem, spaChem, spaDump]);
 
   const onWorkRef = useRef(onWorkStateChange);
   onWorkRef.current = onWorkStateChange;
@@ -332,6 +337,7 @@ export default function ReadingsForm({
     setSpa(ws.spa);
     setPoolChem(ws.poolChem);
     setSpaChem(ws.spaChem);
+    setSpaDump(ws.spaDump ?? "no");
   }, [serviceLogRow, idPrefix]);
 
   useEffect(() => {
@@ -394,6 +400,21 @@ export default function ReadingsForm({
     setSpaChem((c) => ({ ...c, [key]: value }));
   };
 
+  const toggleSpaDump = () => {
+    hasUserEditedRef.current = true;
+    setSpaDump((prev) => {
+      const next = prev === "yes" ? "no" : "yes";
+      if (next === "yes") {
+        setSpaChem((c) => ({
+          ...c,
+          granulated: SPA_DUMP_GRANULATED,
+          ta: SPA_DUMP_TA,
+        }));
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!onWorkStateChange || !serviceLogsReady) return undefined;
     const id = window.setTimeout(() => {
@@ -401,7 +422,7 @@ export default function ReadingsForm({
       onWorkRef.current?.(stateRef.current);
     }, 1200);
     return () => clearTimeout(id);
-  }, [pool, spa, poolChem, spaChem, onWorkStateChange, serviceLogsReady]);
+  }, [pool, spa, poolChem, spaChem, spaDump, onWorkStateChange, serviceLogsReady]);
 
   return (
     <div className={styles.wrap}>
@@ -459,6 +480,17 @@ export default function ReadingsForm({
           onFieldChange={setSpaChemField}
           rows={SPA_CHEMICAL_ROWS}
         />
+        <div className={styles.dumpBtnWrap}>
+          <button
+            type="button"
+            className={spaDump === "yes" ? styles.dumpBtnActive : styles.dumpBtn}
+            id={`${idPrefix}-spa-dump`}
+            aria-pressed={spaDump === "yes"}
+            onClick={toggleSpaDump}
+          >
+            {spaDump === "yes" ? "Dump (active)" : "Dump"}
+          </button>
+        </div>
       </BeforeAfterSection>
     </div>
   );

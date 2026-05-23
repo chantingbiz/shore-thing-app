@@ -384,6 +384,7 @@ export default function StephenPropertyDetailPage() {
             spa: ws.spa,
             poolChem: ws.poolChem,
             spaChem: ws.spaChem,
+            spaDump: ws.spaDump,
           })
         : emptyServiceLogWorkPatch();
     } else {
